@@ -291,6 +291,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Pipeline MUSI zakończyć działające sesje agentów przebiegu w granicach czasu z NFR-4.28d, liczonych od zamknięcia lub merge'u PR, i porzucić zaplanowane działania przebiegu: obsługę komentarzy po opóźnieniu (FR-4.22) i ponowienia etapu (FR-4.30).
   - Po zamknięciu lub merge'u PR przebieg nie ma żadnych skutków ubocznych (FR-4.28c), w tym commitów i pushy na branch PR. Operacja, która przeszła sprawdzenie przed zamknięciem lub merge'em, MOŻE się dokończyć w tych samych granicach czasu.
   - Pipeline MUSI zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled` i zwolnić blokadę współdzielonego środowiska dev, jeśli przebieg ją trzyma (OQ-2). Nie zmienia przy tym PR ani brancha, nie anuluje trwających bramek CI, nie cofa commitów i nie wycofuje przerwanego wdrożenia na dev.
+  - Pipeline MUSI zdjąć z issue etykiety `agent:ready` i `plan:approved`, także po merge'u PR, pod nazwami zapisanymi w magazynie stanu przy starcie przebiegu (FR-10.4). Ponowne dodanie `agent:ready` wysyła wtedy zdarzenie GitHuba i rozpoczyna nowy przebieg (FR-4.28b), a akceptacja planu nie przechodzi na kolejny przebieg.
   - Pipeline nie publikuje komentarza o zakończeniu. Zapisuje je w logu zdarzeń (NFR-11.3) ze stanem i etapem w chwili zamknięcia lub merge'u PR oraz z przerwanymi działaniami.
   - Zamknięcie lub merge PR zatrzymanego przebiegu nie zmienia jego stanu (FR-4.28).
 
@@ -493,7 +494,7 @@ Podpis każdego payloadu jest weryfikowany, a jego treść traktowana jako nieza
 - **FR-10.1** Każde podłączone repozytorium MUSI zawierać `.sdlc-agents.yml`. Pipeline waliduje go względem schematu i odmawia działania, jeśli jest niepoprawny. Odmowa nie obejmuje zatrzymania (FR-10.4).
 - **FR-10.2** Konfiguracja MOŻE zaostrzać bazowy zestaw organizacji (ostrzejsze progi, więcej zablokowanych ścieżek, więcej ścieżek high-impact). NIE MOŻE go łagodzić. Dodanie hostów do listy dozwolonych połączeń sieciowych jest możliwe wyłącznie przez zmianę bazowego zestawu organizacji.
 - **FR-10.3** Zmiany w `.sdlc-agents.yml` są zmianami high-impact (FR-6.1).
-- **FR-10.4** Etykieta zatrzymania `agent:stop` NIE MOŻE być konfigurowalna. Zatrzymanie (FR-4.28 do FR-4.28f, FR-4.34) NIE MOŻE zależeć od `.sdlc-agents.yml`: działa także wtedy, gdy plik jest niepoprawny, usunięty albo zmienia się w trakcie przebiegu. Porządki z FR-4.28a używają nazw etykiet zapisanych w magazynie stanu przy starcie przebiegu.
+- **FR-10.4** Etykieta zatrzymania `agent:stop` NIE MOŻE być konfigurowalna. Zatrzymanie (FR-4.28 do FR-4.28f, FR-4.34) NIE MOŻE zależeć od `.sdlc-agents.yml`: działa także wtedy, gdy plik jest niepoprawny, usunięty albo zmienia się w trakcie przebiegu. Porządki z FR-4.28a i FR-4.35 używają nazw etykiet zapisanych w magazynie stanu przy starcie przebiegu.
 
 Przykład (wartości są zastępcze, poza tymi, dla których specyfikacja podaje wartość domyślną):
 
