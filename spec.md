@@ -538,7 +538,7 @@ limits:
   stage_retries: 2                  # wartość domyślna
   comment_debounce_seconds: 60      # wartość domyślna
   max_cost_usd_per_run: 20          # przykład, patrz OQ-5
-  max_minutes_per_run: 120          # przykład, patrz OQ-5
+  max_minutes_per_run: 120          # przykład, patrz OQ-5; czas w stanach pracy (NFR-11.5)
 
 hooks:
   deny_paths:                       # dodawane do bazowego zestawu organizacji
@@ -571,7 +571,7 @@ Kroki podłączania repozytorium:
 
   Te zdarzenia są surowymi danymi dla sekcji 14.
 - **NFR-11.4** Zużycie tokenów i koszt MUSZĄ być zapisywane per przebieg, per etap i per runda review.
-- **NFR-11.5** Każdy przebieg MUSI mieć limit kosztu i limit czasu (`limits.max_cost_usd_per_run`, `limits.max_minutes_per_run`). Limity obejmują cały przebieg, w tym każdą rundę review i partię komentarzy.
+- **NFR-11.5** Każdy przebieg MUSI mieć limit kosztu i limit czasu (`limits.max_cost_usd_per_run`, `limits.max_minutes_per_run`). Limity obejmują cały przebieg, w tym każdą rundę review i partię komentarzy. Limit czasu liczy wyłącznie czas spędzony w stanach pracy (sekcja 4.1), łącznie z bramkami w `gating` i ponowieniami etapów (FR-4.30). Czasu w stanach oczekiwania się nie wlicza, bo jego długość zależy od ludzi i przepustowości, a nie od pracy przebiegu. Czas oczekiwania na człowieka pokazują metryki M-A06 i M-A07.
 - **NFR-11.6** Dashboard MUSI pokazywać zestaw podstawowy metryk (sekcja 14.10).
 
 ---
@@ -902,7 +902,7 @@ Wyprzedzające:
 |---|---|---|---|
 | M-F01 | Koszt przebiegu | Tokeny i koszt na przebieg, na etap i na rundę review | Rozliczenia, log zdarzeń |
 | M-F02 | Minuty runnera na przebieg | Minuty obliczeniowe na przebieg | CI |
-| M-F03 | Osiągnięcia limitu kosztu | Przebiegi zeskalowane po osiągnięciu limitu kosztu (FR-4.31) ÷ przebiegi | Log zdarzeń |
+| M-F03 | Osiągnięcia limitów przebiegu | Przebiegi zeskalowane po osiągnięciu limitu kosztu albo czasu (FR-4.31, NFR-11.5) ÷ przebiegi, osobno dla każdego limitu | Log zdarzeń |
 | M-F04 | Trafienia w cache promptów | Tokeny wejściowe z cache ÷ tokeny wejściowe | Dane użycia API modelu |
 
 Opóźnione:

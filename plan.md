@@ -47,7 +47,7 @@ W MVP działa jeden aktywny przebieg naraz. Pozostałe czekają w `queued`. Pow�
 
 ### 1.3 Kryteria ukończenia MVP
 
-- Trzy issue testowe (prosta funkcja, poprawka błędu, zmiana high-impact z nową zależnością) dochodzą do `awaiting-human-review` bez ingerencji człowieka poza akceptacją planu high-impact. Każde mieści się w limicie 45 minut i w limicie tur.
+- Trzy issue testowe (prosta funkcja, poprawka błędu, zmiana high-impact z nową zależnością) dochodzą do `awaiting-human-review` bez ingerencji człowieka poza akceptacją planu high-impact. Każde mieści się w limicie 45 minut w stanach pracy (NFR-11.5) i w limicie tur.
 - Żaden krok nie generuje opłat poza subskrypcją Claude Pro.
 - Issue z wstrzykniętą instrukcją, w tym z prośbą o wypisanie tokenu i zmiennych środowiskowych, nie prowadzi do żadnej zablokowanej akcji, a blokady są w logu audytowym.
 - Publiczne logi i artefakty workflow nie zawierają tokenu w żadnej postaci.
@@ -239,7 +239,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 ### P4. Orchestrator i magazyn stanu
 
-- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu (z nazwami etykiet z chwili startu przebiegu), `orchestrate.yml`, `stop.yml`, `pr-closed.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop` z porządkowaniem etykiet i check runa, zakończenie przebiegu po zamknięciu lub merge'u PR w każdym stanie aktywnym MVP, odrzucanie `agent:ready` przy obecnym `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
+- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu (z nazwami etykiet z chwili startu przebiegu), `orchestrate.yml`, `stop.yml`, `pr-closed.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop` z porządkowaniem etykiet i check runa, zakończenie przebiegu po zamknięciu lub merge'u PR w każdym stanie aktywnym MVP, odrzucanie `agent:ready` przy obecnym `agent:stop`, `needs-human`, limity czasu i tur (czas jako suma pobytów w stanach pracy, liczona z przejść zapisanych w komentarzu ze stanem, NFR-11.5), ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
 - **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, FR-4.35, NFR-4.28d, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, SEC-9.8a, FR-10.4, NFR-11.3 do NFR-11.5, QG-12.3a (częściowo).
 - **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec, w czasie z NFR-4.28d. Po zatrzymaniu nie ma żadnych skutków ubocznych poza dokończeniem operacji, która przeszła sprawdzenie przed dodaniem etykiety (FR-4.28c), a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania. Każde zatrzymanie publikuje w issue dokładnie jedno podsumowanie z elementami z FR-4.28f, także przy `agent:stop` dodanym do issue i do PR. Zatrzymanie działa również przy niepoprawnym `.sdlc-agents.yml` w repozytorium demo (FR-10.4). Testy zatrzymania z QG-12.3a w zakresie MVP przechodzą na zaślepkach w każdym stanie aktywnym MVP, a zdarzenia zatrzymania i sprawdzeń z FR-4.28c trafiają do logu zdarzeń (NFR-11.3). Ponowne `agent:ready` po zdjęciu `agent:stop` startuje nowy przebieg, a `agent:ready` przy obecnym `agent:stop` zostaje zdjęte z komentarzem. Zamknięcie lub merge PR w trakcie joba roli przerywa run w czasie z NFR-4.28d, przebieg przechodzi do `done`, a po zamknięciu nie ma żadnych pushy ani komentarzy przebiegu (FR-4.35).
 - **Zależy od:** P2, P3.
@@ -364,7 +364,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | NFR-11.1 | Odstępstwo | F5 | W MVP JSONL jako artefakt workflow. |
 | NFR-11.2, NFR-11.6 | Później | F5 | |
 | NFR-11.3, NFR-11.4 | MVP | P4 | |
-| NFR-11.5 | Częściowo | P4 | Limity czasu i tur są egzekwowane; koszt to szacunek zużycia. |
+| NFR-11.5 | Częściowo | P4 | Limity czasu i tur są egzekwowane, a czas liczy się tylko w stanach pracy; koszt to szacunek zużycia. |
 | QG-12.1, QG-12.5, QG-12.6, QG-12.7 | Później | F4 | |
 | QG-12.3 | Częściowo | P2, P8, F4 | Przypadki ataku w testach hooków i w teście end-to-end. |
 | QG-12.3a | Częściowo | P4, P8, F4 | Testy zatrzymania na zaślepkach w P4 i z sesją agenta w P8, w zestawie ewaluacji od F4. Bez przypadków FR-4.28e i FR-4.34 (rozdz. 8). |
