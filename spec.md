@@ -240,7 +240,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 
 ### 4.8 Kontrola przebiegu
 
-- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1). Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze, a pipeline publikuje krótkie podsumowanie. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
+- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1), czyli w czasie z NFR-4.28d. Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze (FR-4.28c), a pipeline publikuje krótkie podsumowanie. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
 - **FR-4.28a** Przy zatrzymaniu pipeline MUSI:
   - zdjąć z issue etykiety `agent:ready` i `plan:approved`, żeby ponowne dodanie `agent:ready` wysłało zdarzenie GitHuba, a akceptacja planu nie przeszła na kolejny przebieg;
   - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled`. Merge wymaga wtedy obejścia `agent-review` przez człowieka (FR-6.3);
@@ -254,6 +254,12 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Nowy przebieg ma nowe budżety: limit rund review (FR-4.18), ponowień etapu (FR-4.30) oraz kosztu i czasu (NFR-11.5). Metryki liczone na issue lub PR obejmują wszystkie jego przebiegi (sekcja 14.1).
   - Jeśli issue ma otwarty PR utworzony przez pipeline, nowy przebieg kontynuuje pracę na jego branchu. Commity poprzedniego przebiegu i commity dodane przez człowieka są częścią zmiany: Planner uwzględnia je w planie, a bramki i Reviewer oceniają cały diff (FR-4.13). Zbędne zmiany Developer cofa nowymi commitami. Jeśli branch jest za głównym branchem, Developer na początku implementacji MUSI scalić do niego aktualny główny branch commitem merge z komunikatem zgodnym z FR-4.9. Rebase i force-push są zabronione (SEC-9.2, SEC-9.5).
   - Jeśli issue nie ma otwartego PR, bo człowiek zamknął PR albo usunął jego branch, nowy przebieg zaczyna od zera: tworzy nowy branch z aktualnego głównego brancha (FR-4.7) i nowy draft PR, który linkuje poprzedni. Nazwa nowego brancha MUSI różnić się od nazw istniejących branchy. Zamknięcie PR jest więc sposobem na rozpoczęcie pracy od zera.
+- **FR-4.28c** Przed każdym skutkiem ubocznym przebiegu pipeline MUSI sprawdzić, czy przebieg jest nadal aktywny. Skutki uboczne to commit, push, komentarz, zmiana issue lub PR (w tym etykiet i próśb o review), check run, utworzenie issue i wdrożenie na dev. Przebieg jest aktywny, gdy ani issue, ani jego PR nie ma `agent:stop`, a magazyn stanu wskazuje ten przebieg jako aktywny przebieg issue. Jeśli któryś warunek nie jest spełniony, działanie NIE MOŻE się odbyć.
+  - Sprawdzenie odczytuje etykiety w chwili działania, a nie ze zdarzenia. Sama etykieta nie wystarcza, bo jej zdjęcie nie wznawia zatrzymanego przebiegu (FR-4.28). Sam stan też nie wystarcza, bo jego zapis może się spóźnić albo nie nastąpić, gdy zdarzenie `agent:stop` nie dotrze (FR-4.28e).
+  - Reguła obejmuje kod Orchestratora i wywołania narzędzi agentów (SEC-9.8a). Nie obejmuje działań samego zatrzymania: porządków z FR-4.28a i podsumowania.
+  - Samo kończenie sesji agentów nie wystarcza, bo anulowany proces dostaje kilka sekund przed zabiciem. Operacja, która przeszła sprawdzenie przed dodaniem etykiety, MOŻE się dokończyć, ale musi się zmieścić w czasie z NFR-4.28d.
+- **NFR-4.28d** Zatrzymanie MUSI się zakończyć w ciągu 60 sekund od dodania etykiety `agent:stop` w 95% zatrzymań i w ciągu 5 minut w każdym zatrzymaniu. Zatrzymanie jest zakończone, gdy wszystkie sesje agentów przebiegu się zakończyły i nie trwa żaden jego skutek uboczny (FR-4.28c). Działań samego zatrzymania (FR-4.28a i podsumowania) się nie wlicza. Czas liczy się od znacznika czasu dodania etykiety w GitHubie do ostatniego z tych zdarzeń w logu audytowym (NFR-11.1, NFR-11.3).
+- **FR-4.28e** Pipeline NIE MOŻE polegać wyłącznie na dostarczeniu zdarzenia `agent:stop`. Zdarzenie może nie dotrzeć, np. gdy nie uda się dostawa webhooka, a GitHub nie ponawia nieudanych dostaw sam. Co najwyżej co 2 minuty pipeline MUSI porównać każdy przebieg w stanie aktywnym z etykietami jego issue i PR i zatrzymać (FR-4.28, FR-4.28a) przebieg, którego issue lub PR ma `agent:stop`. Zatrzymanie wykryte w ten sposób liczy się jako utracone zdarzenie w M-G04.
 - **FR-4.29** Etapy MUSZĄ być idempotentne i wznawialne. Stan przebiegu jest przechowywany poza sesjami agentów, żeby etap, który się wywrócił, mógł zostać wznowiony bez powtarzania skutków ubocznych.
 - **FR-4.30** Etap, który zawiedzie z przyczyn infrastrukturalnych, MUSI być ponawiany do skonfigurowanego budżetu (domyślnie 2, ustawiane przez `limits.stage_retries`). Potem przebieg przechodzi do `needs-human`.
 - **FR-4.31** Gdy przebieg osiągnie limit kosztu lub czasu (NFR-11.5), MUSI przejść do `needs-human`.
@@ -266,7 +272,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 
 | Agent | Odpowiedzialność | Wejścia | Wyjścia | Narzędzia |
 |---|---|---|---|---|
-| Orchestrator | Steruje maszyną stanów, przydziela pracę, klasyfikuje komentarze człowieka, pilnuje limitów | Zdarzenia GitHuba, stan przebiegu | Zmiany stanu, prośby o review, opis PR, podsumowania | GitHub API (etykiety, stan PR, prośby o review, komentarze), magazyn stanu przebiegów, wywołanie modelu do klasyfikacji komentarzy |
+| Orchestrator | Steruje maszyną stanów, przydziela pracę, klasyfikuje komentarze człowieka, pilnuje limitów | Zdarzenia GitHuba, stan przebiegu | Zmiany stanu, prośby o review, opis PR, podsumowania | GitHub API (etykiety, stan PR, prośby o review, komentarze, zakończenie check runa `agent-review` przy zatrzymaniu), anulowanie sesji agentów przy zatrzymaniu, magazyn stanu przebiegów, wywołanie modelu do klasyfikacji komentarzy |
 | Planner | Pisze plan i klasyfikuje zmiany high-impact | Issue, zawartość repozytorium | Komentarz z planem | Odczyt i przeszukiwanie repozytorium, komentowanie issue |
 | Developer | Implementuje zmianę, naprawia znaleziska, działa na prośby o zmianę, otwiera issue spoza zakresu, aktualizuje plan | Issue, plan, znaleziska, komentarze | Commity na branchu issue, draft PR, odpowiedzi, nowe issue | Odczyt i zapis plików w przestrzeni roboczej, uruchamianie skonfigurowanych poleceń, commit i push na branch issue, komentowanie, tworzenie issue |
 | Reviewer | Recenzuje diff, sprawdza zakres i jakość, zwraca werdykt | Issue, plan, diff, wyniki bramek, wcześniejsze znaleziska | Check run `agent-review`, komentarze review | Odczyt i przeszukiwanie repozytorium, odczyt diffu i wyników bramek, publikowanie komentarzy review i check runa |
@@ -276,11 +282,13 @@ Zakresy tokenów dla każdego agenta (uprawnienia GitHub App, SEC-8.1):
 
 | Agent | Contents | Pull requests | Issues | Checks | Inne |
 |---|---|---|---|---|---|
-| Orchestrator | odczyt | zapis | zapis | odczyt | brak |
+| Orchestrator | odczyt | zapis | zapis | zapis (tylko zakończenie `agent-review` przy zatrzymaniu, FR-4.28a) | Actions: zapis (tylko anulowanie runów przebiegu przy zatrzymaniu, FR-4.28), gdy sesje agentów działają na runnerach GitHub Actions |
 | Planner | odczyt | brak | zapis (komentarze) | brak | brak |
 | Developer | zapis (tylko niechronione branche) | zapis | zapis | odczyt | brak |
 | Reviewer | odczyt | zapis (tylko komentarze; zatwierdzanie jest zablokowane, SEC-9.7) | brak | zapis (`agent-review`) | brak |
 | DevOps | odczyt | zapis (komentarze) | brak | brak | tylko środowisko dev, przez OIDC |
+
+Uprawnienie Actions Orchestratora MOŻE pochodzić z tokenu workflow (`GITHUB_TOKEN`) nadanego tylko jobowi zatrzymania zamiast z GitHub App. To jedyny wyjątek od SEC-8.1, dopuszczony dlatego, że takiego tokenu nie dostaje żaden inny job ani agent.
 
 Wymagania:
 
@@ -413,7 +421,8 @@ Przed wywołaniem narzędzia hook blokuje:
 - **SEC-9.8** działania zarezerwowane dla ludzi:
   - merge lub włączenie auto-merge;
   - odrzucenie review lub oznaczenie wątku jako rozwiązanego;
-  - dodanie `plan:approved`, usunięcie `needs-human` lub usunięcie `agent:stop`.
+  - dodanie `plan:approved`, usunięcie `needs-human` lub usunięcie `agent:stop`;
+- **SEC-9.8a** każde wywołanie narzędzia ze skutkiem ubocznym (FR-4.28c), gdy przebieg nie jest już aktywny. Hook sprawdza etykiety i magazyn stanu w chwili wywołania, a błąd sprawdzenia blokuje wywołanie (SEC-9.0a).
 
 Po wywołaniu narzędzia hook:
 
