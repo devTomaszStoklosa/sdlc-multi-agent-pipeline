@@ -1,0 +1,5 @@
+{
+  "threshold": 3,
+  "format": ["typescript", "javascript"],
+  "ignore": ["**/.claude/worktrees/**"]
+}
