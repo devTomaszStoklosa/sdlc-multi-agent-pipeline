@@ -312,6 +312,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | FR-4.32 | Częściowo | P4 | Komentarze z czasu przerwy obsługuje F2. |
 | FR-4.34 | Odstępstwo | — | Rozdz. 8. W MVP wyłącznik to procedura ręczna z rozdz. 2.2. |
 | FR-4.35 | MVP | P4 | Obsługuje `pr-closed.yml` (rozdz. 2.2). Porzucanie obsługi komentarzy po opóźnieniu i zwalnianie blokady dev wchodzą razem z F2 i F3. |
+| FR-4.36 | Odstępstwo | — | Rozdz. 8. Utracone zdarzenie autor odtwarza ręcznie. |
 
 ### 7.2 Agenci, human-in-the-loop i bramki (spec 5, 6, 7)
 
@@ -402,6 +403,7 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Limit kosztu jako szacunek zużycia (NFR-11.5) | Subskrypcja zamiast płatności za tokeny | Do czasu zmiany modelu rozliczeń |
 | Brak linii bazowej i dashboardu z fazy 0 (spec 14.13, spec 15) | Nie mają sensu, zanim pipeline zadziała | F5 |
 | Brak okresowego porównania przebiegów z etykietami (FR-4.28e) | W trybie Actions GitHub dostarcza zdarzenia wewnętrznie, bez webhooków. Zgubione `agent:stop` nie da skutku ubocznego dzięki sprawdzeniu z FR-4.28c, a job roli kończy się najpóźniej z limitem 45 minut. Porządki z FR-4.28a i podsumowanie wymagają wtedy ponownego dodania etykiety. | Przy własnym serwerze webhooków, razem z SEC-8.8 |
+| Brak okresowego porównania przebiegów z GitHubem dla pozostałych zdarzeń (FR-4.36) | Powód jak przy FR-4.28e. W MVP działa jeden przebieg naraz, a jedynym człowiekiem jest autor, więc przebieg, który utknął, widać w komentarzu ze stanem. Utracone zdarzenie autor odtwarza, powtarzając działanie: zdejmuje i ponownie dodaje `agent:ready` albo `plan:approved`, dodaje i ponownie zdejmuje `needs-human`, otwiera ponownie i zamyka PR, ponownie uruchamia workflow bramek albo jeszcze raz dodaje komentarz. Zmergowanego PR nie da się ponownie otworzyć, więc przebieg po utraconym merge'u autor kończy etykietą `agent:stop`. | Przy własnym serwerze webhooków, razem z FR-4.28e i SEC-8.8 |
 | Wyłącznik globalny jako procedura ręczna (FR-4.34) | W MVP działa jeden przebieg naraz w jednym repozytorium (rozdz. 1.2). `agent:ready` dodane przy wyłączonym `orchestrate.yml` nie jest zdejmowane ani komentowane, więc po ponownym włączeniu workflow trzeba je dodać jeszcze raz. | Przy kilku przebiegach naraz albo w F6 |
 
 ---

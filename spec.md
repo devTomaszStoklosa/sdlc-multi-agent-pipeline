@@ -294,6 +294,14 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Pipeline MUSI zdjąć z issue etykiety `agent:ready` i `plan:approved`, także po merge'u PR, pod nazwami zapisanymi w magazynie stanu przy starcie przebiegu (FR-10.4). Ponowne dodanie `agent:ready` wysyła wtedy zdarzenie GitHuba i rozpoczyna nowy przebieg (FR-4.28b), a akceptacja planu nie przechodzi na kolejny przebieg.
   - Pipeline nie publikuje komentarza o zakończeniu. Zapisuje je w logu zdarzeń (NFR-11.3) ze stanem i etapem w chwili zamknięcia lub merge'u PR oraz z przerwanymi działaniami.
   - Zamknięcie lub merge PR zatrzymanego przebiegu nie zmienia jego stanu (FR-4.28).
+- **FR-4.36** Pipeline NIE MOŻE polegać wyłącznie na dostarczeniu pozostałych zdarzeń z tabeli w sekcji 9.4, bo zdarzenie może nie dotrzeć tak samo jak `agent:stop` (FR-4.28e). Co najwyżej co 10 minut pipeline MUSI porównać każdy przebieg w stanie aktywnym z GitHubem i obsłużyć zdarzenie, którego skutek widać w GitHubie, a którego przebieg nie obsłużył:
+  - etykietę `plan:approved` dodaną, gdy przebieg jest w `awaiting-plan-approval` (FR-4.5);
+  - brak etykiety `needs-human`, gdy przebieg jest w `needs-human` (FR-4.32);
+  - komentarz do issue, wysłane review albo komentarz w PR od użytkownika z prawem zapisu, dodane po ostatnim obsłużonym (FR-4.22, FR-4.23);
+  - zakończony workflow bramek dla ostatniego pushu, gdy przebieg jest w `gating` (FR-4.12);
+  - zamknięty albo zmergowany PR przebiegu (FR-4.35).
+
+  Pipeline MUSI też wykryć issue z etykietą `agent:ready` bez aktywnego przebiegu i obsłużyć je tak jak dodanie tej etykiety (FR-4.1, FR-4.28b, FR-4.34), sprawdzając uprawnienia osoby, która ją dodała, w historii zdarzeń issue. Obsługa jest idempotentna (FR-4.29): zdarzenie, które dotrze po porównaniu, nie zmienia stanu drugi raz. Każde zdarzenie wykryte w ten sposób liczy się jako utracone zdarzenie w M-G04. Porównanie MOŻE działać w tym samym procesie co porównanie z FR-4.28e. Okres jest dłuższy niż w FR-4.28e, bo te zdarzenia nie dotyczą bezpieczeństwa, a każde porównanie zużywa limit zapytań do API GitHuba.
 
 ---
 
@@ -484,6 +492,8 @@ Gdy agent zgłasza zakończenie pracy:
 | Z issue zdjęta etykieta `needs-human` | Przebieg jest w `needs-human` | Wznowienie przebiegu (FR-4.32) |
 | PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w stanie aktywnym | Przejście przebiegu do `done` (FR-4.35) |
 | PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w `stopped` | Zapis zdarzenia w logu, bez zmiany stanu (FR-4.28) |
+
+Zdarzenia z tej tabeli, które nie dotarły, wykrywa porównanie przebiegów z GitHubem: `agent:stop` i wyłącznik globalny według FR-4.28e, pozostałe według FR-4.36.
 
 Podpis każdego payloadu jest weryfikowany, a jego treść traktowana jako niezaufana (SEC-8.5, SEC-8.8).
 
@@ -930,7 +940,7 @@ Wyprzedzające:
 | M-G01 | Awarie etapów z przyczyn infrastrukturalnych | Awarie etapów spowodowane runnerami, błędami API lub timeoutami ÷ etapy | Log zdarzeń |
 | M-G02 | Błędy API modelu i limity zapytań | Błędy i odpowiedzi o przekroczeniu limitu ÷ wywołania modelu | Log zdarzeń |
 | M-G03 | Odsetek udanych wznowień | Etapy po awarii, które wznowiono i ukończono ÷ etapy po awarii | Log zdarzeń |
-| M-G04 | Opóźnienie webhooków i utracone zdarzenia | Czas od dostarczenia zdarzenia do jego obsługi; zdarzenia nieobsłużone | Log zdarzeń, dostarczenia webhooków GitHuba |
+| M-G04 | Opóźnienie webhooków i utracone zdarzenia | Czas od dostarczenia zdarzenia do jego obsługi; zdarzenia nieobsłużone, w tym wykryte przez porównanie przebiegów z GitHubem (FR-4.28e, FR-4.36) | Log zdarzeń, dostarczenia webhooków GitHuba |
 | M-G05 | Odsetek udanych wdrożeń na dev | Udane wdrożenia na dev ÷ wdrożenia na dev | Rejestr wdrożeń |
 
 Opóźnione:
