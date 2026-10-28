@@ -144,6 +144,7 @@ Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne*
 | `awaiting-plan-approval` | Człowiek akceptuje plan | `developing` |
 | `awaiting-plan-approval` | Człowiek żąda zmian w planie | `planning` |
 | `developing` | Developer wypycha commit | `gating` |
+| `developing` | Developer aktualizuje plan, a nowa wersja jest high-impact (FR-4.11) | `awaiting-plan-approval` |
 | `gating` | Dowolna bramka nie przechodzi | `developing` (bez zużycia rundy review) |
 | `gating` | Wszystkie bramki przechodzą | `reviewing` |
 | `reviewing` | Werdykt `changes_requested`, limity nieprzekroczone | `developing` |
@@ -173,6 +174,8 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - klasyfikację high-impact wraz z uzasadnieniem.
 - **FR-4.4** Planner MUSI sklasyfikować zmianę według kryteriów high-impact (FR-6.1). Plan high-impact przenosi przebieg do `awaiting-plan-approval`. Każdy inny plan jest publikowany dla wglądu, a przebieg toczy się dalej bez czekania.
 - **FR-4.5** Człowiek akceptuje plan etykietą `plan:approved` albo żąda zmian w komentarzu. Żądanie zmian odsyła plan do Plannera.
+  - Akceptacją jest wyłącznie dodanie etykiety, gdy przebieg jest w `awaiting-plan-approval`. Akceptacja dotyczy ostatniej opublikowanej wersji planu, a magazyn stanu zapisuje numer tej wersji, autora etykiety i czas (FR-4.6). Etykieta dodana w innym stanie nie jest akceptacją.
+  - Zanim pipeline opublikuje wersję planu, która wymaga akceptacji (FR-4.4, FR-4.11), MUSI zdjąć z issue etykietę `plan:approved`, jeśli tam jest. Etykieta z wcześniejszej akceptacji nie przechodzi więc na nową wersję, a człowiek akceptuje nową wersję zwykłym dodaniem etykiety, bo GitHub wysyła zdarzenie tylko wtedy, gdy etykiety jeszcze nie było.
 - **FR-4.6** Każda wersja planu MUSI być zachowana. Bramki i Reviewer MUSZĄ używać ostatniej zaakceptowanej wersji dla zmian high-impact, a w pozostałych przypadkach ostatniej opublikowanej.
 
 ### 4.4 Implementacja i bramki automatyczne
@@ -181,7 +184,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 - **FR-4.8** Developer MUSI otworzyć draft PR po pierwszym pushu. Opis PR zawiera `Closes #<numer-issue>`.
 - **FR-4.9** Komunikaty commitów MUSZĄ być zgodne z Conventional Commits i odwoływać się do issue. Wymusza to hook `commit-msg` (QG-9.14).
 - **FR-4.10** Gdy Developer zauważy problem poza zakresem issue, MUSI otworzyć osobne issue i NIE MOŻE naprawiać tego problemu w tym PR. Opis PR wymienia te issue.
-- **FR-4.11** Gdy potrzebna jest zmiana poza planem (np. poprawa miejsc wywołania po zmianie sygnatury), Developer MUSI najpierw zaktualizować plan, podając powód. Jeśli zaktualizowany plan spełnia kryteria high-impact, przebieg przechodzi do `awaiting-plan-approval`.
+- **FR-4.11** Gdy potrzebna jest zmiana poza planem (np. poprawa miejsc wywołania po zmianie sygnatury), Developer MUSI najpierw zaktualizować plan, podając powód. Jeśli zaktualizowany plan spełnia kryteria high-impact, przebieg przechodzi do `awaiting-plan-approval` i czeka na akceptację nowej wersji (FR-4.5).
 - **FR-4.12** Każdy push MUSI uruchamiać bramki automatyczne (sekcja 7). Niezaliczona bramka odsyła swój wynik do Developera i nie zużywa rundy review.
 
 ### 4.5 Pętla review
@@ -288,8 +291,17 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Pipeline MUSI zakończyć działające sesje agentów przebiegu w granicach czasu z NFR-4.28d, liczonych od zamknięcia lub merge'u PR, i porzucić zaplanowane działania przebiegu: obsługę komentarzy po opóźnieniu (FR-4.22) i ponowienia etapu (FR-4.30).
   - Po zamknięciu lub merge'u PR przebieg nie ma żadnych skutków ubocznych (FR-4.28c), w tym commitów i pushy na branch PR. Operacja, która przeszła sprawdzenie przed zamknięciem lub merge'em, MOŻE się dokończyć w tych samych granicach czasu.
   - Pipeline MUSI zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled` i zwolnić blokadę współdzielonego środowiska dev, jeśli przebieg ją trzyma (OQ-2). Nie zmienia przy tym PR ani brancha, nie anuluje trwających bramek CI, nie cofa commitów i nie wycofuje przerwanego wdrożenia na dev.
+  - Pipeline MUSI zdjąć z issue etykiety `agent:ready` i `plan:approved`, także po merge'u PR, pod nazwami zapisanymi w magazynie stanu przy starcie przebiegu (FR-10.4). Ponowne dodanie `agent:ready` wysyła wtedy zdarzenie GitHuba i rozpoczyna nowy przebieg (FR-4.28b), a akceptacja planu nie przechodzi na kolejny przebieg.
   - Pipeline nie publikuje komentarza o zakończeniu. Zapisuje je w logu zdarzeń (NFR-11.3) ze stanem i etapem w chwili zamknięcia lub merge'u PR oraz z przerwanymi działaniami.
   - Zamknięcie lub merge PR zatrzymanego przebiegu nie zmienia jego stanu (FR-4.28).
+- **FR-4.36** Pipeline NIE MOŻE polegać wyłącznie na dostarczeniu pozostałych zdarzeń z tabeli w sekcji 9.4, bo zdarzenie może nie dotrzeć tak samo jak `agent:stop` (FR-4.28e). Co najwyżej co 10 minut pipeline MUSI porównać każdy przebieg w stanie aktywnym z GitHubem i obsłużyć zdarzenie, którego skutek widać w GitHubie, a którego przebieg nie obsłużył:
+  - etykietę `plan:approved` dodaną, gdy przebieg jest w `awaiting-plan-approval` (FR-4.5);
+  - brak etykiety `needs-human`, gdy przebieg jest w `needs-human` (FR-4.32);
+  - komentarz do issue, wysłane review albo komentarz w PR od użytkownika z prawem zapisu, dodane po ostatnim obsłużonym (FR-4.22, FR-4.23);
+  - zakończony workflow bramek dla ostatniego pushu, gdy przebieg jest w `gating` (FR-4.12);
+  - zamknięty albo zmergowany PR przebiegu (FR-4.35).
+
+  Pipeline MUSI też wykryć issue z etykietą `agent:ready` bez aktywnego przebiegu i obsłużyć je tak jak dodanie tej etykiety (FR-4.1, FR-4.28b, FR-4.34), sprawdzając uprawnienia osoby, która ją dodała, w historii zdarzeń issue. Obsługa jest idempotentna (FR-4.29): zdarzenie, które dotrze po porównaniu, nie zmienia stanu drugi raz. Każde zdarzenie wykryte w ten sposób liczy się jako utracone zdarzenie w M-G04. Porównanie MOŻE działać w tym samym procesie co porównanie z FR-4.28e. Okres jest dłuższy niż w FR-4.28e, bo te zdarzenia nie dotyczą bezpieczeństwa, a każde porównanie zużywa limit zapytań do API GitHuba.
 
 ---
 
@@ -472,7 +484,7 @@ Gdy agent zgłasza zakończenie pracy:
 | Issue oznaczone `agent:ready` | Dodane przez użytkownika z uprawnieniem triage lub wyższym, brak aktywnego przebiegu, ani issue, ani jego otwarty PR nie mają `agent:stop`, a wyłącznik globalny jest wyłączony | Start przebiegu (FR-4.1, FR-4.28b) |
 | Issue oznaczone `agent:ready` | Issue lub jego otwarty PR ma `agent:stop` albo wyłącznik globalny jest włączony | Zdjęcie `agent:ready` i komentarz w issue (FR-4.28b, FR-4.34) |
 | Issue lub PR oznaczone `agent:stop` | Przebieg jest w stanie aktywnym (sekcja 4.1) | Zatrzymanie przebiegu (FR-4.28, FR-4.28a) |
-| Issue oznaczone `plan:approved` | Przebieg jest w `awaiting-plan-approval` | Przejście do `developing` |
+| Issue oznaczone `plan:approved` | Przebieg jest w `awaiting-plan-approval` | Akceptacja ostatniej opublikowanej wersji planu i przejście do `developing` (FR-4.5) |
 | Komentarz do issue | Przebieg jest w `awaiting-plan-approval`, autor ma prawo zapisu | Planner poprawia plan |
 | Wysłane review PR | Zarządzany PR, autor ma prawo zapisu | Obsługa wszystkich komentarzy review (FR-4.22) |
 | Komentarz do review poza review albo komentarz pod PR | Zarządzany PR, autor ma prawo zapisu | Obsługa po opóźnieniu (FR-4.22) |
@@ -480,6 +492,8 @@ Gdy agent zgłasza zakończenie pracy:
 | Z issue zdjęta etykieta `needs-human` | Przebieg jest w `needs-human` | Wznowienie przebiegu (FR-4.32) |
 | PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w stanie aktywnym | Przejście przebiegu do `done` (FR-4.35) |
 | PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w `stopped` | Zapis zdarzenia w logu, bez zmiany stanu (FR-4.28) |
+
+Zdarzenia z tej tabeli, które nie dotarły, wykrywa porównanie przebiegów z GitHubem: `agent:stop` i wyłącznik globalny według FR-4.28e, pozostałe według FR-4.36.
 
 Podpis każdego payloadu jest weryfikowany, a jego treść traktowana jako niezaufana (SEC-8.5, SEC-8.8).
 
@@ -490,7 +504,11 @@ Podpis każdego payloadu jest weryfikowany, a jego treść traktowana jako nieza
 - **FR-10.1** Każde podłączone repozytorium MUSI zawierać `.sdlc-agents.yml`. Pipeline waliduje go względem schematu i odmawia działania, jeśli jest niepoprawny. Odmowa nie obejmuje zatrzymania (FR-10.4).
 - **FR-10.2** Konfiguracja MOŻE zaostrzać bazowy zestaw organizacji (ostrzejsze progi, więcej zablokowanych ścieżek, więcej ścieżek high-impact). NIE MOŻE go łagodzić. Dodanie hostów do listy dozwolonych połączeń sieciowych jest możliwe wyłącznie przez zmianę bazowego zestawu organizacji.
 - **FR-10.3** Zmiany w `.sdlc-agents.yml` są zmianami high-impact (FR-6.1).
-- **FR-10.4** Etykieta zatrzymania `agent:stop` NIE MOŻE być konfigurowalna. Zatrzymanie (FR-4.28 do FR-4.28f, FR-4.34) NIE MOŻE zależeć od `.sdlc-agents.yml`: działa także wtedy, gdy plik jest niepoprawny, usunięty albo zmienia się w trakcie przebiegu. Porządki z FR-4.28a używają nazw etykiet zapisanych w magazynie stanu przy starcie przebiegu.
+- **FR-10.4** Etykieta zatrzymania `agent:stop` NIE MOŻE być konfigurowalna. Zatrzymanie (FR-4.28 do FR-4.28f, FR-4.34) NIE MOŻE zależeć od `.sdlc-agents.yml`: działa także wtedy, gdy plik jest niepoprawny, usunięty albo zmienia się w trakcie przebiegu. Porządki z FR-4.28a i FR-4.35 używają nazw etykiet z kopii konfiguracji zapisanej w magazynie stanu przy starcie przebiegu (FR-10.5).
+- **FR-10.5** Przebieg MUSI używać konfiguracji `.sdlc-agents.yml` z głównego brancha z chwili swojego startu, czyli wejścia do `queued`. Pipeline zapisuje w magazynie stanu zwalidowaną kopię pliku (FR-10.1) i SHA commita, z którego ją odczytał. Zmiana konfiguracji zmergowana w trakcie przebiegu obowiązuje od następnego przebiegu, więc limity, polecenia, kryteria high-impact i nazwy etykiet nie zmieniają się w połowie pracy, a wynik przebiegu da się odtworzyć.
+  - Kopia obowiązuje także po wznowieniu z `needs-human` (FR-4.32). Nowy przebieg (FR-4.28b) czyta konfigurację od nowa.
+  - Bazowy zestaw organizacji (FR-10.2) nie należy do kopii. Pipeline scala kopię z aktualnym zestawem bazowym, więc zaostrzenie bazy organizacji, np. po incydencie, obowiązuje od razu także w trwających przebiegach.
+  - Bramki w CI (sekcja 7) nie korzystają z kopii. Każde uruchomienie bramek stosuje konfigurację obowiązującą w chwili tego uruchomienia, bo wynik bramek decyduje o merge'u do aktualnego głównego brancha (FR-6.3), a kopia z chwili startu mogłaby złagodzić próg zaostrzony w trakcie przebiegu (FR-10.2).
 
 Przykład (wartości są zastępcze, poza tymi, dla których specyfikacja podaje wartość domyślną):
 
@@ -538,7 +556,7 @@ limits:
   stage_retries: 2                  # wartość domyślna
   comment_debounce_seconds: 60      # wartość domyślna
   max_cost_usd_per_run: 20          # przykład, patrz OQ-5
-  max_minutes_per_run: 120          # przykład, patrz OQ-5
+  max_minutes_per_run: 120          # przykład, patrz OQ-5; czas w stanach pracy (NFR-11.5)
 
 hooks:
   deny_paths:                       # dodawane do bazowego zestawu organizacji
@@ -571,7 +589,7 @@ Kroki podłączania repozytorium:
 
   Te zdarzenia są surowymi danymi dla sekcji 14.
 - **NFR-11.4** Zużycie tokenów i koszt MUSZĄ być zapisywane per przebieg, per etap i per runda review.
-- **NFR-11.5** Każdy przebieg MUSI mieć limit kosztu i limit czasu (`limits.max_cost_usd_per_run`, `limits.max_minutes_per_run`). Limity obejmują cały przebieg, w tym każdą rundę review i partię komentarzy.
+- **NFR-11.5** Każdy przebieg MUSI mieć limit kosztu i limit czasu (`limits.max_cost_usd_per_run`, `limits.max_minutes_per_run`). Limity obejmują cały przebieg, w tym każdą rundę review i partię komentarzy. Limit czasu liczy wyłącznie czas spędzony w stanach pracy (sekcja 4.1), łącznie z bramkami w `gating` i ponowieniami etapów (FR-4.30). Czasu w stanach oczekiwania się nie wlicza, bo jego długość zależy od ludzi i przepustowości, a nie od pracy przebiegu. Czas oczekiwania na człowieka pokazują metryki M-A06 i M-A07.
 - **NFR-11.6** Dashboard MUSI pokazywać zestaw podstawowy metryk (sekcja 14.10).
 
 ---
@@ -902,7 +920,7 @@ Wyprzedzające:
 |---|---|---|---|
 | M-F01 | Koszt przebiegu | Tokeny i koszt na przebieg, na etap i na rundę review | Rozliczenia, log zdarzeń |
 | M-F02 | Minuty runnera na przebieg | Minuty obliczeniowe na przebieg | CI |
-| M-F03 | Osiągnięcia limitu kosztu | Przebiegi zeskalowane po osiągnięciu limitu kosztu (FR-4.31) ÷ przebiegi | Log zdarzeń |
+| M-F03 | Osiągnięcia limitów przebiegu | Przebiegi zeskalowane po osiągnięciu limitu kosztu albo czasu (FR-4.31, NFR-11.5) ÷ przebiegi, osobno dla każdego limitu | Log zdarzeń |
 | M-F04 | Trafienia w cache promptów | Tokeny wejściowe z cache ÷ tokeny wejściowe | Dane użycia API modelu |
 
 Opóźnione:
@@ -922,7 +940,7 @@ Wyprzedzające:
 | M-G01 | Awarie etapów z przyczyn infrastrukturalnych | Awarie etapów spowodowane runnerami, błędami API lub timeoutami ÷ etapy | Log zdarzeń |
 | M-G02 | Błędy API modelu i limity zapytań | Błędy i odpowiedzi o przekroczeniu limitu ÷ wywołania modelu | Log zdarzeń |
 | M-G03 | Odsetek udanych wznowień | Etapy po awarii, które wznowiono i ukończono ÷ etapy po awarii | Log zdarzeń |
-| M-G04 | Opóźnienie webhooków i utracone zdarzenia | Czas od dostarczenia zdarzenia do jego obsługi; zdarzenia nieobsłużone | Log zdarzeń, dostarczenia webhooków GitHuba |
+| M-G04 | Opóźnienie webhooków i utracone zdarzenia | Czas od dostarczenia zdarzenia do jego obsługi; zdarzenia nieobsłużone, w tym wykryte przez porównanie przebiegów z GitHubem (FR-4.28e, FR-4.36) | Log zdarzeń, dostarczenia webhooków GitHuba |
 | M-G05 | Odsetek udanych wdrożeń na dev | Udane wdrożenia na dev ÷ wdrożenia na dev | Rejestr wdrożeń |
 
 Opóźnione:
