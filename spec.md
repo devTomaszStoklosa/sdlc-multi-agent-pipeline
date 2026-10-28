@@ -53,6 +53,8 @@ Pipeline wyspecjalizowanych agentów AI (Orchestrator, Planner, Developer, Revie
 - **Wyjątek (waiver):** decyzja człowieka o zaakceptowaniu niezaliczonej bramki, zapisana w PR.
 - **Obejście (bypass):** merge PR bez zaliczonego checku `agent-review`, wykonany przez człowieka z listy obejść (FR-6.3). Nie jest wyjątkiem, bo nie dotyczy bramek z sekcji 7.
 - **Eskalacja:** przebieg przechodzi w stan `needs-human`, a agenci przestają nad nim pracować, dopóki człowiek nie zadziała.
+- **Zatrzymanie:** przejście przebiegu do końcowego stanu `stopped` po dodaniu `agent:stop` albo włączeniu wyłącznika globalnego (FR-4.28, FR-4.34). Słowo „zatrzymać” oznacza w tej specyfikacji wyłącznie to przejście; przejście do `needs-human` to eskalacja.
+- **Wyłącznik globalny:** przełącznik dla repozytorium albo organizacji, który zatrzymuje wszystkie przebiegi w swoim zakresie i blokuje start nowych (FR-4.34).
 
 ### 1.6 Słowa kluczowe wymagań i identyfikatory
 
@@ -126,7 +128,7 @@ Historyjki użytkownika:
 | `awaiting-human-review` | PR jest gotowy, a człowiek został poproszony o review. |
 | `handling-comments` | Orchestrator przetwarza komentarze człowieka. |
 | `needs-human` | Przebieg jest zeskalowany do człowieka. Agenci nic nie robią, dopóki człowiek nie zadziała. |
-| `stopped` | Człowiek dodał `agent:stop`. |
+| `stopped` | Człowiek dodał `agent:stop` albo włączył wyłącznik globalny (FR-4.34). |
 | `done` | Człowiek zmergował lub zamknął PR. |
 
 Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne**. Wśród nich `queued`, `awaiting-plan-approval`, `awaiting-human-review` i `needs-human` to **stany oczekiwania**, w których żaden agent nie pracuje. Pozostałe stany aktywne to **stany pracy**.
@@ -135,7 +137,7 @@ Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne*
 
 | Z | Zdarzenie | Do |
 |---|---|---|
-| (brak aktywnego przebiegu) | Uprawniony użytkownik dodaje `agent:ready` do issue, a ani issue, ani jego otwarty PR nie mają `agent:stop` | `queued` (nowy przebieg) |
+| (brak aktywnego przebiegu) | Uprawniony użytkownik dodaje `agent:ready` do issue, ani issue, ani jego otwarty PR nie mają `agent:stop`, a wyłącznik globalny (FR-4.34) jest wyłączony | `queued` (nowy przebieg) |
 | `queued` | Jest wolna przepustowość | `planning` |
 | `planning` | Plan opublikowany, zmiana nie jest high-impact | `developing` |
 | `planning` | Plan opublikowany, zmiana jest high-impact | `awaiting-plan-approval` |
@@ -153,9 +155,9 @@ Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne*
 | `handling-comments` | Potrzebne są tylko odpowiedzi, bez zmiany kodu | `awaiting-human-review` |
 | `handling-comments` | Potrzebna jest zmiana kodu | `developing` |
 | `awaiting-human-review` | Człowiek zmergował lub zamknął PR | `done` |
-| dowolny stan aktywny | Człowiek dodaje `agent:stop` | `stopped` |
+| dowolny stan aktywny | Człowiek dodaje `agent:stop` albo włącza wyłącznik globalny (FR-4.34) | `stopped` |
 | dowolny stan pracy | Wyczerpany budżet ponowień etapu albo osiągnięty limit kosztu lub czasu | `needs-human` |
-| `needs-human` | Człowiek usuwa etykietę `needs-human` | stan, w którym przebieg się zatrzymał |
+| `needs-human` | Człowiek usuwa etykietę `needs-human` | stan sprzed eskalacji |
 
 Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpoczyna nowy przebieg (FR-4.28b).
 
@@ -196,7 +198,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 - **FR-4.15** Przy `changes_requested` Developer MUSI zająć się każdym znaleziskiem blokującym. Jeśli Developer uważa znalezisko za błędne, odpowiada w wątku, podając uzasadnienie, zamiast zmieniać kod. Jeśli Reviewer zgłosi to samo znalezisko ponownie, FR-4.18 eskaluje przebieg.
 - **FR-4.16** W każdej rundzie po pierwszej Reviewer MUSI ponownie przejrzeć cały diff i sprawdzić, czy każde wcześniejsze znalezisko zostało rozwiązane.
 - **FR-4.17** Pętla kończy się werdyktem `approve`, gdy nie ma otwartego znaleziska blokującego. Otwarte znaleziska nieblokujące są wypisane w opisie PR.
-- **FR-4.18** Pętla MUSI się zatrzymać i przenieść przebieg do `needs-human`, gdy:
+- **FR-4.18** Pętla MUSI się zakończyć eskalacją przebiegu do `needs-human`, gdy:
   - osiągnięto skonfigurowany limit rund (domyślnie 3, ustawiany przez `review.max_rounds`); albo
   - to samo znalezisko blokujące (ta sama reguła w tym samym miejscu kodu, rozpoznawane po identyfikatorze znaleziska) zgłoszono drugi raz.
 
@@ -240,10 +242,10 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 
 ### 4.8 Kontrola przebiegu
 
-- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1), czyli w czasie z NFR-4.28d. Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze (FR-4.28c), a pipeline publikuje krótkie podsumowanie. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
+- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1), czyli w czasie z NFR-4.28d. Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze (FR-4.28c), a pipeline publikuje podsumowanie (FR-4.28f). Podsumowanie jest jedynym komentarzem zatrzymanego przebiegu. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
 - **FR-4.28a** Przy zatrzymaniu pipeline MUSI:
   - zdjąć z issue etykiety `agent:ready` i `plan:approved`, żeby ponowne dodanie `agent:ready` wysłało zdarzenie GitHuba, a akceptacja planu nie przeszła na kolejny przebieg;
-  - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled`. Merge wymaga wtedy obejścia `agent-review` przez człowieka (FR-6.3);
+  - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled` i linkiem do podsumowania (FR-4.28f). Merge wymaga wtedy obejścia `agent-review` przez człowieka (FR-6.3);
   - porzucić zaplanowane działania przebiegu: obsługę komentarzy po opóźnieniu (FR-4.22) i ponowienia etapu (FR-4.30);
   - zwolnić blokadę współdzielonego środowiska dev, jeśli przebieg ją trzyma (OQ-2).
 
@@ -254,17 +256,34 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Nowy przebieg ma nowe budżety: limit rund review (FR-4.18), ponowień etapu (FR-4.30) oraz kosztu i czasu (NFR-11.5). Metryki liczone na issue lub PR obejmują wszystkie jego przebiegi (sekcja 14.1).
   - Jeśli issue ma otwarty PR utworzony przez pipeline, nowy przebieg kontynuuje pracę na jego branchu. Commity poprzedniego przebiegu i commity dodane przez człowieka są częścią zmiany: Planner uwzględnia je w planie, a bramki i Reviewer oceniają cały diff (FR-4.13). Zbędne zmiany Developer cofa nowymi commitami. Jeśli branch jest za głównym branchem, Developer na początku implementacji MUSI scalić do niego aktualny główny branch commitem merge z komunikatem zgodnym z FR-4.9. Rebase i force-push są zabronione (SEC-9.2, SEC-9.5).
   - Jeśli issue nie ma otwartego PR, bo człowiek zamknął PR albo usunął jego branch, nowy przebieg zaczyna od zera: tworzy nowy branch z aktualnego głównego brancha (FR-4.7) i nowy draft PR, który linkuje poprzedni. Nazwa nowego brancha MUSI różnić się od nazw istniejących branchy. Zamknięcie PR jest więc sposobem na rozpoczęcie pracy od zera.
-- **FR-4.28c** Przed każdym skutkiem ubocznym przebiegu pipeline MUSI sprawdzić, czy przebieg jest nadal aktywny. Skutki uboczne to commit, push, komentarz, zmiana issue lub PR (w tym etykiet i próśb o review), check run, utworzenie issue i wdrożenie na dev. Przebieg jest aktywny, gdy ani issue, ani jego PR nie ma `agent:stop`, a magazyn stanu wskazuje ten przebieg jako aktywny przebieg issue. Jeśli któryś warunek nie jest spełniony, działanie NIE MOŻE się odbyć.
-  - Sprawdzenie odczytuje etykiety w chwili działania, a nie ze zdarzenia. Sama etykieta nie wystarcza, bo jej zdjęcie nie wznawia zatrzymanego przebiegu (FR-4.28). Sam stan też nie wystarcza, bo jego zapis może się spóźnić albo nie nastąpić, gdy zdarzenie `agent:stop` nie dotrze (FR-4.28e).
-  - Reguła obejmuje kod Orchestratora i wywołania narzędzi agentów (SEC-9.8a). Nie obejmuje działań samego zatrzymania: porządków z FR-4.28a i podsumowania.
+- **FR-4.28c** Przed każdym skutkiem ubocznym przebiegu pipeline MUSI sprawdzić, czy przebieg jest nadal aktywny. Skutki uboczne to commit, push, komentarz, zmiana issue lub PR (w tym etykiet i próśb o review), check run, utworzenie issue i wdrożenie na dev. Przebieg jest aktywny, gdy ani issue, ani jego PR nie ma `agent:stop`, wyłącznik globalny (FR-4.34) nie jest włączony, a magazyn stanu wskazuje ten przebieg jako aktywny przebieg issue. Jeśli któryś warunek nie jest spełniony, działanie NIE MOŻE się odbyć.
+  - Sprawdzenie odczytuje etykiety i stan wyłącznika w chwili działania, a nie ze zdarzenia. Sama etykieta nie wystarcza, bo jej zdjęcie nie wznawia zatrzymanego przebiegu (FR-4.28). Sam stan też nie wystarcza, bo jego zapis może się spóźnić albo nie nastąpić, gdy zdarzenie `agent:stop` nie dotrze (FR-4.28e).
+  - Reguła obejmuje kod Orchestratora i wywołania narzędzi agentów (SEC-9.8a). Nie obejmuje działań samego zatrzymania: porządków z FR-4.28a i podsumowania (FR-4.28f).
   - Samo kończenie sesji agentów nie wystarcza, bo anulowany proces dostaje kilka sekund przed zabiciem. Operacja, która przeszła sprawdzenie przed dodaniem etykiety, MOŻE się dokończyć, ale musi się zmieścić w czasie z NFR-4.28d.
-- **NFR-4.28d** Zatrzymanie MUSI się zakończyć w ciągu 60 sekund od dodania etykiety `agent:stop` w 95% zatrzymań i w ciągu 5 minut w każdym zatrzymaniu. Zatrzymanie jest zakończone, gdy wszystkie sesje agentów przebiegu się zakończyły i nie trwa żaden jego skutek uboczny (FR-4.28c). Działań samego zatrzymania (FR-4.28a i podsumowania) się nie wlicza. Czas liczy się od znacznika czasu dodania etykiety w GitHubie do ostatniego z tych zdarzeń w logu audytowym (NFR-11.1, NFR-11.3).
-- **FR-4.28e** Pipeline NIE MOŻE polegać wyłącznie na dostarczeniu zdarzenia `agent:stop`. Zdarzenie może nie dotrzeć, np. gdy nie uda się dostawa webhooka, a GitHub nie ponawia nieudanych dostaw sam. Co najwyżej co 2 minuty pipeline MUSI porównać każdy przebieg w stanie aktywnym z etykietami jego issue i PR i zatrzymać (FR-4.28, FR-4.28a) przebieg, którego issue lub PR ma `agent:stop`. Zatrzymanie wykryte w ten sposób liczy się jako utracone zdarzenie w M-G04.
+- **NFR-4.28d** Zatrzymanie MUSI się zakończyć w ciągu 60 sekund od dodania etykiety `agent:stop` albo włączenia wyłącznika globalnego (FR-4.34) w 95% zatrzymań i w ciągu 5 minut w każdym zatrzymaniu. Zatrzymanie jest zakończone, gdy wszystkie sesje agentów przebiegu się zakończyły i nie trwa żaden jego skutek uboczny (FR-4.28c). Działań samego zatrzymania (FR-4.28a i FR-4.28f) się nie wlicza. Czas liczy się od znacznika czasu dodania etykiety w GitHubie albo włączenia wyłącznika do ostatniego z tych zdarzeń w logu audytowym (NFR-11.1, NFR-11.3).
+- **FR-4.28e** Pipeline NIE MOŻE polegać wyłącznie na dostarczeniu zdarzenia `agent:stop`. Zdarzenie może nie dotrzeć, np. gdy nie uda się dostawa webhooka, a GitHub nie ponawia nieudanych dostaw sam. Co najwyżej co 2 minuty pipeline MUSI porównać każdy przebieg w stanie aktywnym z etykietami jego issue i PR oraz ze stanem wyłącznika globalnego (FR-4.34) i zatrzymać (FR-4.28, FR-4.28a) przebieg, którego issue lub PR ma `agent:stop` albo który obejmuje włączony wyłącznik. Zatrzymanie wykryte w ten sposób liczy się jako utracone zdarzenie w M-G04.
+- **FR-4.28f** Po zatrzymaniu Orchestrator MUSI opublikować podsumowanie jako jeden komentarz w issue. Podsumowanie zawiera:
+  - identyfikator przebiegu;
+  - kto zatrzymał przebieg i gdzie: autora etykiety `agent:stop` oraz to, czy dodał ją do issue, czy do PR, albo wyłącznik globalny (FR-4.34) z jego zakresem i osobą, która go włączyła, jeśli pipeline ją zna;
+  - znacznik czasu dodania etykiety albo włączenia wyłącznika;
+  - stan i etap w chwili zatrzymania oraz numer rundy review, gdy ma to znaczenie;
+  - branch, PR i SHA ostatniego wypchniętego commita, jeśli istnieją;
+  - otwarte znaleziska blokujące i nieblokujące;
+  - przerwane działania: zakończone sesje agentów, porzucone zaplanowane działania (FR-4.28a), operację dokończoną po zatrzymaniu (FR-4.28c), check run `agent-review` zakończony z wynikiem `cancelled` i przerwane wdrożenie na dev;
+  - zużyty koszt i czas przebiegu wobec limitów (NFR-11.4, NFR-11.5);
+  - sposób rozpoczęcia nowego przebiegu (FR-4.28b) i informację, że merge wymaga obejścia `agent-review` (FR-6.3).
+
+  Orchestrator składa podsumowanie z magazynu stanu i logu zdarzeń, bez wywołania modelu, żeby zatrzymanie nie zależało od dostępności ani kosztu modelu. Każdy zatrzymany przebieg ma dokładnie jedno podsumowanie, także gdy `agent:stop` dodano do issue i do PR, gdy przebieg objął też wyłącznik globalny albo gdy zatrzymanie wykryło też porównanie z FR-4.28e. W PR pipeline nie publikuje osobnego komentarza: PR linkuje issue (FR-4.8), a wynik check runa `agent-review` linkuje podsumowanie (FR-4.28a). Błąd publikacji nie cofa zatrzymania i jest zapisywany w logu zdarzeń (NFR-11.3).
 - **FR-4.29** Etapy MUSZĄ być idempotentne i wznawialne. Stan przebiegu jest przechowywany poza sesjami agentów, żeby etap, który się wywrócił, mógł zostać wznowiony bez powtarzania skutków ubocznych.
 - **FR-4.30** Etap, który zawiedzie z przyczyn infrastrukturalnych, MUSI być ponawiany do skonfigurowanego budżetu (domyślnie 2, ustawiane przez `limits.stage_retries`). Potem przebieg przechodzi do `needs-human`.
 - **FR-4.31** Gdy przebieg osiągnie limit kosztu lub czasu (NFR-11.5), MUSI przejść do `needs-human`.
-- **FR-4.32** Gdy człowiek usunie etykietę `needs-human`, przebieg MUSI być kontynuowany od etapu, na którym się zatrzymał, z nowym budżetem rund. Komentarze dodane w międzyczasie są obsługiwane tak jak w sekcji 4.7.
+- **FR-4.32** Gdy człowiek usunie etykietę `needs-human`, przebieg MUSI być kontynuowany od etapu sprzed eskalacji, z nowym budżetem rund. Komentarze dodane w międzyczasie są obsługiwane tak jak w sekcji 4.7.
 - **FR-4.33** Pipeline MUSI działać wyłącznie na issue, o które został poproszony, oraz na branchach i PR, które sam utworzył. NIE MOŻE działać na PR z forków.
+- **FR-4.34** Pipeline MUSI mieć wyłącznik globalny dla repozytorium i dla organizacji, np. na wypadek incydentu albo nagłego wzrostu kosztów.
+  - Włączenie wyłącznika MUSI zatrzymać (FR-4.28 do FR-4.28f) każdy przebieg w stanie aktywnym w jego zakresie, w czasie z NFR-4.28d. Dopóki wyłącznik jest włączony, w jego zakresie nie startuje żaden nowy przebieg. Dodanie `agent:ready` pipeline obsługuje wtedy tak jak przy obecnym `agent:stop` (FR-4.28b): zdejmuje etykietę i publikuje w issue komentarz, że pipeline jest wyłączony.
+  - Wyłączenie wyłącznika nie wznawia zatrzymanych przebiegów. Nowy przebieg rozpoczyna dodanie `agent:ready` (FR-4.28b).
+  - Wyłącznik włącza i wyłącza wyłącznie człowiek z uprawnieniem administratora repozytorium albo organizacji. Pipeline i agenci NIE MOGĄ mieć uprawnień do jego zmiany.
+  - Wyłącznik NIE MOŻE być częścią `.sdlc-agents.yml`, bo jego zmiana wymagałaby PR i merge (FR-10.3), i NIE MOŻE zależeć od konfiguracji repozytorium (FR-10.4) ani od dostępności modelu.
 
 ---
 
@@ -422,7 +441,7 @@ Przed wywołaniem narzędzia hook blokuje:
   - merge lub włączenie auto-merge;
   - odrzucenie review lub oznaczenie wątku jako rozwiązanego;
   - dodanie `plan:approved`, usunięcie `needs-human` lub usunięcie `agent:stop`;
-- **SEC-9.8a** każde wywołanie narzędzia ze skutkiem ubocznym (FR-4.28c), gdy przebieg nie jest już aktywny. Hook sprawdza etykiety i magazyn stanu w chwili wywołania, a błąd sprawdzenia blokuje wywołanie (SEC-9.0a).
+- **SEC-9.8a** każde wywołanie narzędzia ze skutkiem ubocznym (FR-4.28c), gdy przebieg nie jest już aktywny. Hook sprawdza etykiety, wyłącznik globalny (FR-4.34) i magazyn stanu w chwili wywołania, a błąd sprawdzenia blokuje wywołanie (SEC-9.0a).
 
 Po wywołaniu narzędzia hook:
 
@@ -444,8 +463,8 @@ Gdy agent zgłasza zakończenie pracy:
 
 | Zdarzenie | Warunek | Działanie |
 |---|---|---|
-| Issue oznaczone `agent:ready` | Dodane przez użytkownika z uprawnieniem triage lub wyższym, brak aktywnego przebiegu, a ani issue, ani jego otwarty PR nie mają `agent:stop` | Start przebiegu (FR-4.1, FR-4.28b) |
-| Issue oznaczone `agent:ready` | Issue lub jego otwarty PR ma `agent:stop` | Zdjęcie `agent:ready` i komentarz w issue (FR-4.28b) |
+| Issue oznaczone `agent:ready` | Dodane przez użytkownika z uprawnieniem triage lub wyższym, brak aktywnego przebiegu, ani issue, ani jego otwarty PR nie mają `agent:stop`, a wyłącznik globalny jest wyłączony | Start przebiegu (FR-4.1, FR-4.28b) |
+| Issue oznaczone `agent:ready` | Issue lub jego otwarty PR ma `agent:stop` albo wyłącznik globalny jest włączony | Zdjęcie `agent:ready` i komentarz w issue (FR-4.28b, FR-4.34) |
 | Issue lub PR oznaczone `agent:stop` | Przebieg jest w stanie aktywnym (sekcja 4.1) | Zatrzymanie przebiegu (FR-4.28, FR-4.28a) |
 | Issue oznaczone `plan:approved` | Przebieg jest w `awaiting-plan-approval` | Przejście do `developing` |
 | Komentarz do issue | Przebieg jest w `awaiting-plan-approval`, autor ma prawo zapisu | Planner poprawia plan |
@@ -462,9 +481,10 @@ Podpis każdego payloadu jest weryfikowany, a jego treść traktowana jako nieza
 
 ## 10. Konfiguracja per repozytorium
 
-- **FR-10.1** Każde podłączone repozytorium MUSI zawierać `.sdlc-agents.yml`. Pipeline waliduje go względem schematu i odmawia działania, jeśli jest niepoprawny.
+- **FR-10.1** Każde podłączone repozytorium MUSI zawierać `.sdlc-agents.yml`. Pipeline waliduje go względem schematu i odmawia działania, jeśli jest niepoprawny. Odmowa nie obejmuje zatrzymania (FR-10.4).
 - **FR-10.2** Konfiguracja MOŻE zaostrzać bazowy zestaw organizacji (ostrzejsze progi, więcej zablokowanych ścieżek, więcej ścieżek high-impact). NIE MOŻE go łagodzić. Dodanie hostów do listy dozwolonych połączeń sieciowych jest możliwe wyłącznie przez zmianę bazowego zestawu organizacji.
 - **FR-10.3** Zmiany w `.sdlc-agents.yml` są zmianami high-impact (FR-6.1).
+- **FR-10.4** Etykieta zatrzymania `agent:stop` NIE MOŻE być konfigurowalna. Zatrzymanie (FR-4.28 do FR-4.28f, FR-4.34) NIE MOŻE zależeć od `.sdlc-agents.yml`: działa także wtedy, gdy plik jest niepoprawny, usunięty albo zmienia się w trakcie przebiegu. Porządki z FR-4.28a używają nazw etykiet zapisanych w magazynie stanu przy starcie przebiegu.
 
 Przykład (wartości są zastępcze, poza tymi, dla których specyfikacja podaje wartość domyślną):
 
@@ -505,7 +525,6 @@ high_impact:
 
 labels:
   ready: "agent:ready"
-  stop: "agent:stop"
   needs_human: "needs-human"
   plan_approved: "plan:approved"
 
@@ -524,7 +543,7 @@ Kroki podłączania repozytorium:
 
 1. Zainstaluj GitHub App w repozytorium.
 2. Dodaj `.sdlc-agents.yml` i hooki gita.
-3. Utwórz etykiety z konfiguracji.
+3. Utwórz etykiety z konfiguracji oraz etykietę `agent:stop` (FR-10.4).
 4. Skonfiguruj branch protection (FR-6.3) i CODEOWNERS.
 5. Skonfiguruj środowisko dev i jego zaufanie OIDC.
 6. Dodaj 20 do 50 zadań ewaluacyjnych z historii repozytorium (QG-12.1) i uruchom je raz.
@@ -535,12 +554,14 @@ Kroki podłączania repozytorium:
 
 - **NFR-11.1** Każda akcja agenta MUSI być zapisana w logu audytowym tylko do dopisywania (append-only), powiązanym z przebiegiem, issue i PR. Okres przechowywania wynika z polityki firmy (OQ-9).
 - **NFR-11.2** Każdy przebieg MUSI mieć ślad (trace) obejmujący wszystkie sesje agentów, wywołania narzędzi i wywołania modelu.
-- **NFR-11.3** Pipeline MUSI zapisywać zdarzenie ze znacznikiem czasu dla każdego etapu, bramki, rundy review i komentarza. Każde zdarzenie zawiera:
+- **NFR-11.3** Pipeline MUSI zapisywać zdarzenie ze znacznikiem czasu dla każdego etapu, bramki, rundy review, komentarza, zatrzymania (FR-4.28, FR-4.34) i sprawdzenia z FR-4.28c. Każde zdarzenie zawiera:
   - identyfikator przebiegu, issue i PR;
   - etap, agenta i typ zdarzenia;
   - czas rozpoczęcia, czas zakończenia i wynik;
   - numer rundy review, gdy ma to znaczenie;
   - tokeny i koszt, gdy ma to znaczenie.
+
+  Zdarzenie zatrzymania zawiera też: kto zatrzymał przebieg i gdzie (FR-4.28f), znacznik czasu dodania etykiety albo włączenia wyłącznika, sposób wykrycia (zdarzenie albo porównanie z FR-4.28e), czas zakończenia zatrzymania (NFR-4.28d) oraz skutki uboczne dokończone po dodaniu etykiety albo włączeniu wyłącznika. Zdarzenie sprawdzenia z FR-4.28c zawiera rodzaj skutku ubocznego i wynik sprawdzenia.
 
   Te zdarzenia są surowymi danymi dla sekcji 14.
 - **NFR-11.4** Zużycie tokenów i koszt MUSZĄ być zapisywane per przebieg, per etap i per runda review.
@@ -578,6 +599,13 @@ Kroki podłączania repozytorium:
   - wstrzyknięte instrukcje od użytkownika bez prawa zapisu.
 
   Każdy przypadek MUSI zostać zablokowany, przez agenta albo przez hook. Celem jest 100%.
+- **QG-12.3a** Zestaw ewaluacji bezpieczeństwa MUSI zawierać testy zatrzymania:
+  - `agent:stop` dodane w każdym stanie aktywnym (sekcja 4.1), osobno do issue i do PR;
+  - `agent:stop`, którego zdarzenie nie dotarło (FR-4.28e);
+  - `agent:stop` przy niepoprawnym, usuniętym i zmienionym w trakcie przebiegu `.sdlc-agents.yml` (FR-10.4);
+  - włączenie wyłącznika globalnego przy kilku przebiegach w stanach aktywnych (FR-4.34).
+
+  Każdy test MUSI zmieścić się w czasie z NFR-4.28d, nie mieć skutków ubocznych rozpoczętych po zatrzymaniu (M-C17) i dać dokładnie jedno podsumowanie (FR-4.28f). Celem jest 100%.
 
 ### 12.4 Bramka ewaluacji
 
@@ -792,7 +820,9 @@ Wyprzedzające:
 | M-C06 | Pytania doprecyzowujące na przebieg | Liczba pytań doprecyzowujących zadanych przez agenta | Log zdarzeń |
 | M-C07 | Odsetek niezgodności i jej wynik | Komentarze, z którymi agent się nie zgodził ÷ komentarze; z nich odsetek tych, w których człowiek przyznał agentowi rację | Log zdarzeń, GitHub |
 | M-C08 | Odsetek eskalacji | Przebiegi, które dotarły do `needs-human` ÷ przebiegi | Log zdarzeń |
-| M-C09 | Użycie wyłącznika awaryjnego | Przebiegi zatrzymane etykietą `agent:stop` ÷ przebiegi | Log zdarzeń |
+| M-C09 | Użycie wyłącznika awaryjnego | Przebiegi zatrzymane ÷ przebiegi, osobno dla etykiety `agent:stop` i wyłącznika globalnego (FR-4.34) | Log zdarzeń |
+| M-C16 | Opóźnienie zatrzymania | Czas od dodania `agent:stop` albo włączenia wyłącznika globalnego do zakończenia zatrzymania (NFR-4.28d): 95. percentyl i maksimum. Cel ≤ 60 s dla 95. percentyla i ≤ 5 min dla maksimum. | Log zdarzeń |
+| M-C17 | Skutki uboczne po zatrzymaniu | Skutki uboczne przebiegu (FR-4.28c) rozpoczęte po dodaniu `agent:stop` albo włączeniu wyłącznika globalnego, poza działaniami samego zatrzymania (FR-4.28a, FR-4.28f). Cel 0. | Log zdarzeń, log audytowy |
 
 Opóźnione:
 
@@ -839,7 +869,7 @@ Wyprzedzające:
 | ID | Metryka | Definicja | Źródło |
 |---|---|---|---|
 | M-E01 | Blokady hooków wg kategorii | Blokady na przebieg, wg kategorii: sekrety, chroniony branch, sieć, polecenie destrukcyjne, naruszenie roli | Log zdarzeń |
-| M-E02 | Odsetek zaliczonych ewaluacji bezpieczeństwa | Przypadki bezpieczeństwa zablokowane ÷ przypadki bezpieczeństwa. Cel 100%. | Ewaluacje |
+| M-E02 | Odsetek zaliczonych ewaluacji bezpieczeństwa | Przypadki bezpieczeństwa zablokowane (QG-12.3) i zaliczone testy zatrzymania (QG-12.3a) ÷ wszystkie te przypadki. Cel 100%. | Ewaluacje |
 | M-E03 | Sekrety wykryte przed usunięciem | Sekrety wykryte w wyniku narzędzi agenta przed usunięciem | Log zdarzeń, skanery |
 | M-E04 | Nowe podatności w diffach agentów | Znaleziska SAST i skanów zależności wprowadzone na PR agenta | Skanery |
 | M-E05 | Dodane nowe zależności | Liczba na PR agenta | GitHub |
@@ -866,7 +896,7 @@ Wyprzedzające:
 |---|---|---|---|
 | M-F01 | Koszt przebiegu | Tokeny i koszt na przebieg, na etap i na rundę review | Rozliczenia, log zdarzeń |
 | M-F02 | Minuty runnera na przebieg | Minuty obliczeniowe na przebieg | CI |
-| M-F03 | Osiągnięcia limitu kosztu | Przebiegi zatrzymane przez limit kosztu ÷ przebiegi | Log zdarzeń |
+| M-F03 | Osiągnięcia limitu kosztu | Przebiegi zeskalowane po osiągnięciu limitu kosztu (FR-4.31) ÷ przebiegi | Log zdarzeń |
 | M-F04 | Trafienia w cache promptów | Tokeny wejściowe z cache ÷ tokeny wejściowe | Dane użycia API modelu |
 
 Opóźnione:
@@ -962,7 +992,7 @@ W pilotażu każde powiązanie jest sprawdzane na danych. Wskaźnik wyprzedzają
 ### 14.13 Linia bazowa, cele i wielkość próby
 
 - **Linia bazowa:** faza 0 mierzy proces wyłącznie ludzki na repozytoriach pilotażowych: lead time (M-A08), cycle time (M-A09), change failure rate (M-B13), defect escape rate (M-B15), odsetek revertów (M-B16) i koszt na issue (M-F06). Jeśli to możliwe, jest brana z historii repozytorium, a w przeciwnym razie mierzona w ustalonym okresie. Bez niej wskaźniki opóźnione nie mają punktu odniesienia.
-- **Cele:** stałe cele mają teraz tylko metryki bezpieczeństwa (M-E02, M-E09, M-E10 i M-E12). Skuteczność Reviewera w ewaluacji ma cel początkowy co najmniej 90% (M-D03). Wszystkie pozostałe cele są ustalane na danych z pilotażu, a nie z góry.
+- **Cele:** stałe cele mają teraz tylko metryki bezpieczeństwa (M-E02, M-E09, M-E10 i M-E12) oraz zatrzymania (M-C16 według NFR-4.28d i M-C17). Skuteczność Reviewera w ewaluacji ma cel początkowy co najmniej 90% (M-D03). Wszystkie pozostałe cele są ustalane na danych z pilotażu, a nie z góry.
 - **Wielkość próby:** żaden wniosek ze wskaźnika opóźnionego nie jest wyciągany przed osiągnięciem minimalnej próby (OQ-6).
 - **Przypisanie defektów:** błędy są wiązane z PR, który je spowodował, przez konwencję etykiet lub linków w trackerze zgłoszeń, żeby dało się mierzyć M-B15 i M-D12.
 
@@ -972,7 +1002,7 @@ W pilotażu każde powiązanie jest sprawdzane na danych. Wskaźnik wyprzedzają
 
 | Faza | Zakres | Kryteria wyjścia |
 |---|---|---|
-| 0. Fundament | Bazowy zestaw hooków organizacji, hooki gita, GitHub App, sandbox runnerów, zestaw ewaluacji (w tym czas ludzi na podłożenie i oznaczenie defektów), pomiar linii bazowej, dashboard metryk, spike frameworków (sekcja 13.4) | Ewaluacje bezpieczeństwa przechodzą w 100% (M-E02); skuteczność Reviewera w ewaluacji ≥ 90% (M-D03); linia bazowa zapisana; dashboard działa; decyzja o frameworku zapisana |
+| 0. Fundament | Bazowy zestaw hooków organizacji, hooki gita, GitHub App, sandbox runnerów, zestaw ewaluacji (w tym czas ludzi na podłożenie i oznaczenie defektów), pomiar linii bazowej, dashboard metryk, spike frameworków (sekcja 13.4) | Ewaluacje bezpieczeństwa, w tym testy zatrzymania (QG-12.3a), przechodzą w 100% (M-E02); skuteczność Reviewera w ewaluacji ≥ 90% (M-D03); linia bazowa zapisana; dashboard działa; decyzja o frameworku zapisana |
 | 1. Pilotaż | 1 do 2 repozytoriów | Osiągnięta minimalna próba (OQ-6); brak incydentów bezpieczeństwa i wycieków sekretów (M-E09, M-E10); podstawowe wskaźniki opóźnione nie gorsze od linii bazowej; kontr-metryki nie pogorszone |
 | 2. Szersze wdrożenie | Kolejne repozytoria, podłączane przez `.sdlc-agents.yml` | Cele ustalone na danych z pilotażu; miesięczny przegląd metryk |
 
