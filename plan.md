@@ -87,7 +87,7 @@ MVP nie może generować żadnych opłat poza istniejącą subskrypcją Claude P
 | GitHub App (OQ-8, SEC-8.1) | Jedna aplikacja bez uprawnienia `workflows`. Tokeny zawężane per rola przez `actions/create-github-app-token` z parametrami `permission-*`, zgodnie z tabelą zakresów w spec 5. | Tylko ludzie zmieniają CI; każda rola ma minimalne uprawnienia. | Osobna aplikacja na rolę (więcej kluczy do ochrony). |
 | Właściciel pipeline'u (OQ-11) | Autor jest właścicielem i operatorem. Do potwierdzenia. | Projekt jednoosobowy. | — |
 | Ponowne uruchomienie po `agent:stop` (FR-4.28b) | Job `decide` odrzuca `agent:ready`, gdy issue lub jego otwarty PR ma `agent:stop`: zdejmuje etykietę i publikuje komentarz. Nowy przebieg z otwartym PR kontynuuje jego branch, a kod joba Developera przed sesją agenta scala do niego aktualny `main` commitem merge; konflikty rozwiązuje Developer w sesji. Bez otwartego PR przebieg tworzy nowy branch i nowy draft PR. | Spec 4.8 po doprecyzowaniu w issue #4. Scalanie wykonuje kod joba, bo agent nie ma dostępu do GitHuba (rozdz. 3.2). | Automatyczne zdejmowanie `agent:stop` przez pipeline (cofa decyzję człowieka, SEC-9.8); ciche ignorowanie `agent:ready` (etykieta zostaje, a późniejsze zdjęcie `agent:stop` niczego nie uruchamia). |
-| Zatrzymanie przebiegu (FR-4.28, SEC-8.9) | Osobny workflow `stop.yml` poza grupą `concurrency`, uruchamiany dodaniem etykiety `agent:stop` do issue lub PR. Anuluje aktywny run przebiegu (identyfikator z komentarza ze stanem) tokenem `GITHUB_TOKEN` z uprawnieniem `actions: write` nadanym tylko temu jobowi. Potem zapisuje stan `stopped`, zdejmuje `agent:ready` i `plan:approved`, kończy check run `agent-review` w toku wynikiem `cancelled` (FR-4.28a) i publikuje podsumowanie tokenem App zawężonym do `issues: write` i `checks: write`. Kod jobów sprawdza etykietę przed każdym skutkiem ubocznym (rozdz. 3.2). | Zatrzymanie nie czeka na koniec joba roli (do 45 minut) i żadne inne zdarzenie nie anuluje go w kolejce. | Obsługa w `orchestrate.yml` w grupie per issue (czeka w kolejce i może zostać z niej usunięta); obsługa w `orchestrate.yml` z grupą zależną od etykiety (`actions: write` dla całego Orchestratora); samo sprawdzanie etykiety bez anulowania runu (agent pracuje dalej i zużywa limit Pro); `actions: write` dla GitHub App (szersze uprawnienia aplikacji i zmiana kroku ręcznego). |
+| Zatrzymanie przebiegu (FR-4.28, SEC-8.9) | Osobny workflow `stop.yml` poza grupą `concurrency`, uruchamiany dodaniem etykiety `agent:stop` do issue lub PR. Anuluje aktywny run przebiegu (identyfikator z komentarza ze stanem) tokenem `GITHUB_TOKEN` z uprawnieniem `actions: write` nadanym tylko temu jobowi. Potem zapisuje stan `stopped`, zdejmuje `agent:ready` i `plan:approved`, kończy check run `agent-review` w toku wynikiem `cancelled` (FR-4.28a) i publikuje podsumowanie tokenem App zawężonym do `issues: write` i `checks: write`. Kod jobów sprawdza zatrzymanie (etykietę i stan przebiegu) przed każdym skutkiem ubocznym (rozdz. 3.2, FR-4.28c). | Zatrzymanie nie czeka na koniec joba roli (do 45 minut) i żadne inne zdarzenie nie anuluje go w kolejce. | Obsługa w `orchestrate.yml` w grupie per issue (czeka w kolejce i może zostać z niej usunięta); obsługa w `orchestrate.yml` z grupą zależną od etykiety (`actions: write` dla całego Orchestratora); samo sprawdzanie etykiety bez anulowania runu (agent pracuje dalej i zużywa limit Pro); `actions: write` dla GitHub App (szersze uprawnienia aplikacji i zmiana kroku ręcznego). |
 | Ochrona `main` (FR-6.3) | Dwa rulesety. Ruleset bramek wymaga bramek z rozdz. 3.6 i approvalu code ownera, dopuszcza zmiany `main` tylko przez PR, blokuje force-push i nie ma listy obejść. Ruleset review agenta wymaga check runa `agent-review`, a na liście obejść ma tylko rolę administratora repozytorium, z obejściem możliwym tylko przy merge PR. Każdy wymagany check ma przypięte źródło: `agent-review` GitHub App pipeline'u, a bramka aplikację, która ją wystawia. | Człowiek zmerguje PR spoza pipeline'u albo PR po zatrzymaniu przebiegu bez pomijania bramek i approvalu, bo obejście jednego rulesetu nie zwalnia z reguł drugiego (rozdz. 12). Pipeline nie dotyka PR, których nie utworzył. Check o tej samej nazwie z innego źródła nie odblokowuje merge. | Klasyczna branch protection (nie pozwala obejść jednego checku bez obejścia pozostałych); check `agent-review` z wynikiem `neutral` publikowany przez pipeline dla PR poza przebiegiem (działanie na cudzych PR wbrew FR-4.33 i po zatrzymaniu wbrew FR-4.28, a PR z forków nie mają sekretów do tokenu App); `agent-review` jako check niewymagany (nic nie wymusza review Reviewera na PR agenta); wymóg zależny od autora PR albo brancha źródłowego (rulesety działają tylko na branchu docelowym); wymagane checki bez przypiętego źródła (check o tej nazwie może wystawić inna aplikacja albo osoba z prawem zapisu). |
 
 ---
@@ -105,7 +105,7 @@ Kod pipeline'u podlega tym samym zasadom co kod tworzony przez agentów (spec 7.
 
 Sesje agentów nie dostają żadnego tokenu GitHub. Agent pracuje tylko na przestrzeni roboczej i kończy pracę wynikiem w JSON: planem, komunikatem commita, werdyktem ze znaleziskami, odpowiedziami w wątkach albo listą issue spoza zakresu. Kod joba waliduje ten wynik schematem i dopiero wtedy wykonuje skutki uboczne w GitHubie tokenem roli: komentarze, commit, push, draft PR, check run, prośbę o review.
 
-Przed każdym skutkiem ubocznym kod joba sprawdza, czy issue lub PR nie ma etykiety `agent:stop`. Jeśli ma, job kończy się bez akcji. O zatrzymaniu rozstrzyga etykieta, a nie komentarz ze stanem, więc spóźniony zapis stanu nie cofnie zatrzymania (FR-4.28).
+Przed każdym skutkiem ubocznym kod joba sprawdza, czy issue lub PR nie ma etykiety `agent:stop` i czy komentarz ze stanem nadal wskazuje jego przebieg jako aktywny (FR-4.28c). Jeśli któryś warunek wskazuje zatrzymanie, job kończy się bez akcji. Do zablokowania wystarczy jeden z nich: spóźniony zapis stanu nie cofnie zatrzymania, a zdjęcie etykiety go nie wznowi (FR-4.28).
 
 Dzięki temu zakazy z SEC-9.2, SEC-9.6, SEC-9.7 i SEC-9.8 są wymuszone strukturalnie: agent nie ma czym wykonać zakazanej akcji. Hooki z spec 9.2 są drugą warstwą (SEC-9.0c), a nie jedyną. Ta zasada zmniejsza też skutki prompt injection (SEC-8.5), bo wstrzyknięta instrukcja może zmienić najwyżej treść wyniku, który i tak przechodzi walidację.
 
@@ -234,8 +234,8 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 ### P4. Orchestrator i magazyn stanu
 
 - **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu, `orchestrate.yml`, `stop.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop` z porządkowaniem etykiet i check runa, odrzucanie `agent:ready` przy obecnym `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
-- **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, NFR-11.3 do NFR-11.5.
-- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec. Po zatrzymaniu nie ma żadnych skutków ubocznych, a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania. Ponowne `agent:ready` po zdjęciu `agent:stop` startuje nowy przebieg, a `agent:ready` przy obecnym `agent:stop` zostaje zdjęte z komentarzem.
+- **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, NFR-4.28d, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, SEC-9.8a, NFR-11.3 do NFR-11.5.
+- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec, w czasie z NFR-4.28d. Po zatrzymaniu nie ma żadnych skutków ubocznych poza dokończeniem operacji, która przeszła sprawdzenie przed dodaniem etykiety (FR-4.28c), a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania. Ponowne `agent:ready` po zdjęciu `agent:stop` startuje nowy przebieg, a `agent:ready` przy obecnym `agent:stop` zostaje zdjęte z komentarzem.
 - **Zależy od:** P2, P3.
 
 ### P5. Planner
@@ -297,6 +297,9 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | FR-4.21, FR-4.22, FR-4.24, FR-4.25, FR-4.26, FR-4.27 | Później | F2 | |
 | FR-4.23 | MVP | P4 | Filtr autorów potrzebny już w MVP (rozdz. 4). |
 | FR-4.28, FR-4.28a, FR-4.28b | MVP | P4 do P6 | Porzucanie obsługi komentarzy po opóźnieniu i zwalnianie blokady dev (FR-4.28a) wchodzą razem z F2 i F3. |
+| FR-4.28c | MVP | P4 do P7 | Sprawdzenie w kodzie jobów przed każdym skutkiem ubocznym (rozdz. 3.2). |
+| NFR-4.28d | Częściowo | P4 | Bez FR-4.28e zgubione zdarzenie `agent:stop` wydłuża zatrzymanie do końca joba roli (do 45 minut). |
+| FR-4.28e | Odstępstwo | — | Rozdz. 8. |
 | FR-4.29, FR-4.30, FR-4.31, FR-4.33 | MVP | P4 | FR-4.31: limit kosztu jako szacunek zużycia. |
 | FR-4.32 | Częściowo | P4 | Komentarze z czasu przerwy obsługuje F2. |
 
@@ -339,6 +342,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | SEC-9.0a, SEC-9.0b | MVP | P2 | |
 | SEC-9.0c | Częściowo | P2 | Razem z SEC-8.4. |
 | SEC-9.1, SEC-9.2, SEC-9.3, SEC-9.4, SEC-9.5, SEC-9.6, SEC-9.7, SEC-9.8 | MVP | P2 | SEC-9.4 w granicach SEC-8.4. |
+| SEC-9.8a | MVP | P4 | Strukturalnie: sesja nie ma narzędzi ze skutkami w GitHubie (rozdz. 3.2), a sprawdzenie z FR-4.28c wykonuje kod joba. |
 | QG-9.9, SEC-9.10, NFR-9.11, QG-9.12 | MVP | P2 | |
 | QG-9.13, QG-9.14, QG-9.15 | MVP | P0, P3 | |
 
@@ -384,6 +388,7 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Allowlista ruchu sieciowego tylko częściowo (SEC-8.4, SEC-9.0c) | Runnery hostowane przez GitHub nie mają wbudowanej allowlisty | F6 |
 | Limit kosztu jako szacunek zużycia (NFR-11.5) | Subskrypcja zamiast płatności za tokeny | Do czasu zmiany modelu rozliczeń |
 | Brak linii bazowej i dashboardu z fazy 0 (spec 14.13, spec 15) | Nie mają sensu, zanim pipeline zadziała | F5 |
+| Brak okresowego porównania przebiegów z etykietami (FR-4.28e) | W trybie Actions GitHub dostarcza zdarzenia wewnętrznie, bez webhooków. Zgubione `agent:stop` nie da skutku ubocznego dzięki sprawdzeniu z FR-4.28c, a job roli kończy się najpóźniej z limitem 45 minut. Porządki z FR-4.28a i podsumowanie wymagają wtedy ponownego dodania etykiety. | Przy własnym serwerze webhooków, razem z SEC-8.8 |
 
 ---
 
