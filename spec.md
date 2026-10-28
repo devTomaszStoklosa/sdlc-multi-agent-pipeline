@@ -129,7 +129,7 @@ Historyjki użytkownika:
 | `handling-comments` | Orchestrator przetwarza komentarze człowieka. |
 | `needs-human` | Przebieg jest zeskalowany do człowieka. Agenci nic nie robią, dopóki człowiek nie zadziała. |
 | `stopped` | Człowiek dodał `agent:stop` albo włączył wyłącznik globalny (FR-4.34). |
-| `done` | Człowiek zmergował lub zamknął PR. |
+| `done` | Człowiek zmergował lub zamknął PR przebiegu (FR-4.35). |
 
 Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne**. Wśród nich `queued`, `awaiting-plan-approval`, `awaiting-human-review` i `needs-human` to **stany oczekiwania**, w których żaden agent nie pracuje. Pozostałe stany aktywne to **stany pracy**.
 
@@ -154,7 +154,7 @@ Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne*
 | `awaiting-human-review` | Człowiek wysyła review albo dodaje komentarz | `handling-comments` |
 | `handling-comments` | Potrzebne są tylko odpowiedzi, bez zmiany kodu | `awaiting-human-review` |
 | `handling-comments` | Potrzebna jest zmiana kodu | `developing` |
-| `awaiting-human-review` | Człowiek zmergował lub zamknął PR | `done` |
+| dowolny stan aktywny | Człowiek zmergował lub zamknął PR przebiegu (FR-4.35) | `done` |
 | dowolny stan aktywny | Człowiek dodaje `agent:stop` albo włącza wyłącznik globalny (FR-4.34) | `stopped` |
 | dowolny stan pracy | Wyczerpany budżet ponowień etapu albo osiągnięty limit kosztu lub czasu | `needs-human` |
 | `needs-human` | Człowiek usuwa etykietę `needs-human` | stan sprzed eskalacji |
@@ -256,9 +256,9 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Nowy przebieg ma nowe budżety: limit rund review (FR-4.18), ponowień etapu (FR-4.30) oraz kosztu i czasu (NFR-11.5). Metryki liczone na issue lub PR obejmują wszystkie jego przebiegi (sekcja 14.1).
   - Jeśli issue ma otwarty PR utworzony przez pipeline, nowy przebieg kontynuuje pracę na jego branchu. Commity poprzedniego przebiegu i commity dodane przez człowieka są częścią zmiany: Planner uwzględnia je w planie, a bramki i Reviewer oceniają cały diff (FR-4.13). Zbędne zmiany Developer cofa nowymi commitami. Jeśli branch jest za głównym branchem, Developer na początku implementacji MUSI scalić do niego aktualny główny branch commitem merge z komunikatem zgodnym z FR-4.9. Rebase i force-push są zabronione (SEC-9.2, SEC-9.5).
   - Jeśli issue nie ma otwartego PR, bo człowiek zamknął PR albo usunął jego branch, nowy przebieg zaczyna od zera: tworzy nowy branch z aktualnego głównego brancha (FR-4.7) i nowy draft PR, który linkuje poprzedni. Nazwa nowego brancha MUSI różnić się od nazw istniejących branchy. Zamknięcie PR jest więc sposobem na rozpoczęcie pracy od zera.
-- **FR-4.28c** Przed każdym skutkiem ubocznym przebiegu pipeline MUSI sprawdzić, czy przebieg jest nadal aktywny. Skutki uboczne to commit, push, komentarz, zmiana issue lub PR (w tym etykiet i próśb o review), check run, utworzenie issue i wdrożenie na dev. Przebieg jest aktywny, gdy ani issue, ani jego PR nie ma `agent:stop`, wyłącznik globalny (FR-4.34) nie jest włączony, a magazyn stanu wskazuje ten przebieg jako aktywny przebieg issue. Jeśli któryś warunek nie jest spełniony, działanie NIE MOŻE się odbyć.
-  - Sprawdzenie odczytuje etykiety i stan wyłącznika w chwili działania, a nie ze zdarzenia. Sama etykieta nie wystarcza, bo jej zdjęcie nie wznawia zatrzymanego przebiegu (FR-4.28). Sam stan też nie wystarcza, bo jego zapis może się spóźnić albo nie nastąpić, gdy zdarzenie `agent:stop` nie dotrze (FR-4.28e).
-  - Reguła obejmuje kod Orchestratora i wywołania narzędzi agentów (SEC-9.8a). Nie obejmuje działań samego zatrzymania: porządków z FR-4.28a i podsumowania (FR-4.28f).
+- **FR-4.28c** Przed każdym skutkiem ubocznym przebiegu pipeline MUSI sprawdzić, czy przebieg jest nadal aktywny. Skutki uboczne to commit, push, komentarz, zmiana issue lub PR (w tym etykiet i próśb o review), check run, utworzenie issue i wdrożenie na dev. Przebieg jest aktywny, gdy ani issue, ani jego PR nie ma `agent:stop`, wyłącznik globalny (FR-4.34) nie jest włączony, PR przebiegu (FR-4.35), jeśli istnieje, nie jest zamknięty ani zmergowany, a magazyn stanu wskazuje ten przebieg jako aktywny przebieg issue. Jeśli któryś warunek nie jest spełniony, działanie NIE MOŻE się odbyć.
+  - Sprawdzenie odczytuje etykiety, stan PR i stan wyłącznika w chwili działania, a nie ze zdarzenia. Sama etykieta nie wystarcza, bo jej zdjęcie nie wznawia zatrzymanego przebiegu (FR-4.28). Sam stan też nie wystarcza, bo jego zapis może się spóźnić albo nie nastąpić, gdy zdarzenie `agent:stop` nie dotrze (FR-4.28e).
+  - Reguła obejmuje kod Orchestratora i wywołania narzędzi agentów (SEC-9.8a). Nie obejmuje porządków i podsumowania przy zatrzymaniu (FR-4.28a, FR-4.28f) ani porządków przy zakończeniu przebiegu (FR-4.35).
   - Samo kończenie sesji agentów nie wystarcza, bo anulowany proces dostaje kilka sekund przed zabiciem. Operacja, która przeszła sprawdzenie przed dodaniem etykiety, MOŻE się dokończyć, ale musi się zmieścić w czasie z NFR-4.28d.
 - **NFR-4.28d** Zatrzymanie MUSI się zakończyć w ciągu 60 sekund od dodania etykiety `agent:stop` albo włączenia wyłącznika globalnego (FR-4.34) w 95% zatrzymań i w ciągu 5 minut w każdym zatrzymaniu. Zatrzymanie jest zakończone, gdy wszystkie sesje agentów przebiegu się zakończyły i nie trwa żaden jego skutek uboczny (FR-4.28c). Działań samego zatrzymania (FR-4.28a i FR-4.28f) się nie wlicza. Czas liczy się od znacznika czasu dodania etykiety w GitHubie albo włączenia wyłącznika do ostatniego z tych zdarzeń w logu audytowym (NFR-11.1, NFR-11.3).
 - **FR-4.28e** Pipeline NIE MOŻE polegać wyłącznie na dostarczeniu zdarzenia `agent:stop`. Zdarzenie może nie dotrzeć, np. gdy nie uda się dostawa webhooka, a GitHub nie ponawia nieudanych dostaw sam. Co najwyżej co 2 minuty pipeline MUSI porównać każdy przebieg w stanie aktywnym z etykietami jego issue i PR oraz ze stanem wyłącznika globalnego (FR-4.34) i zatrzymać (FR-4.28, FR-4.28a) przebieg, którego issue lub PR ma `agent:stop` albo który obejmuje włączony wyłącznik. Zatrzymanie wykryte w ten sposób liczy się jako utracone zdarzenie w M-G04.
@@ -284,6 +284,12 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Wyłączenie wyłącznika nie wznawia zatrzymanych przebiegów. Nowy przebieg rozpoczyna dodanie `agent:ready` (FR-4.28b).
   - Wyłącznik włącza i wyłącza wyłącznie człowiek z uprawnieniem administratora repozytorium albo organizacji. Pipeline i agenci NIE MOGĄ mieć uprawnień do jego zmiany.
   - Wyłącznik NIE MOŻE być częścią `.sdlc-agents.yml`, bo jego zmiana wymagałaby PR i merge (FR-10.3), i NIE MOŻE zależeć od konfiguracji repozytorium (FR-10.4) ani od dostępności modelu.
+- **FR-4.35** Gdy człowiek zmerguje lub zamknie PR przebiegu, przebieg w dowolnym stanie aktywnym (sekcja 4.1) MUSI przejść do `done`. PR przebiegu to PR, na którego branchu przebieg pracuje: utworzony przez ten przebieg (FR-4.8) albo otwarty PR poprzedniego przebiegu, który ten przebieg kontynuuje (FR-4.28b).
+  - Pipeline MUSI zakończyć działające sesje agentów przebiegu w granicach czasu z NFR-4.28d, liczonych od zamknięcia lub merge'u PR, i porzucić zaplanowane działania przebiegu: obsługę komentarzy po opóźnieniu (FR-4.22) i ponowienia etapu (FR-4.30).
+  - Po zamknięciu lub merge'u PR przebieg nie ma żadnych skutków ubocznych (FR-4.28c), w tym commitów i pushy na branch PR. Operacja, która przeszła sprawdzenie przed zamknięciem lub merge'em, MOŻE się dokończyć w tych samych granicach czasu.
+  - Pipeline MUSI zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled` i zwolnić blokadę współdzielonego środowiska dev, jeśli przebieg ją trzyma (OQ-2). Nie zmienia przy tym PR ani brancha, nie anuluje trwających bramek CI, nie cofa commitów i nie wycofuje przerwanego wdrożenia na dev.
+  - Pipeline nie publikuje komentarza o zakończeniu. Zapisuje je w logu zdarzeń (NFR-11.3) ze stanem i etapem w chwili zamknięcia lub merge'u PR oraz z przerwanymi działaniami.
+  - Zamknięcie lub merge PR zatrzymanego przebiegu nie zmienia jego stanu (FR-4.28).
 
 ---
 
@@ -301,7 +307,7 @@ Zakresy tokenów dla każdego agenta (uprawnienia GitHub App, SEC-8.1):
 
 | Agent | Contents | Pull requests | Issues | Checks | Inne |
 |---|---|---|---|---|---|
-| Orchestrator | odczyt | zapis | zapis | zapis (tylko zakończenie `agent-review` przy zatrzymaniu, FR-4.28a) | Actions: zapis (tylko anulowanie runów przebiegu przy zatrzymaniu, FR-4.28), gdy sesje agentów działają na runnerach GitHub Actions |
+| Orchestrator | odczyt | zapis | zapis | zapis (tylko zakończenie `agent-review` przy zatrzymaniu i zakończeniu przebiegu, FR-4.28a, FR-4.35) | Actions: zapis (tylko anulowanie runów przebiegu przy zatrzymaniu i zakończeniu przebiegu, FR-4.28, FR-4.35), gdy sesje agentów działają na runnerach GitHub Actions |
 | Planner | odczyt | brak | zapis (komentarze) | brak | brak |
 | Developer | zapis (tylko niechronione branche) | zapis | zapis | odczyt | brak |
 | Reviewer | odczyt | zapis (tylko komentarze; zatwierdzanie jest zablokowane, SEC-9.7) | brak | zapis (`agent-review`) | brak |
@@ -441,7 +447,7 @@ Przed wywołaniem narzędzia hook blokuje:
   - merge lub włączenie auto-merge;
   - odrzucenie review lub oznaczenie wątku jako rozwiązanego;
   - dodanie `plan:approved`, usunięcie `needs-human` lub usunięcie `agent:stop`;
-- **SEC-9.8a** każde wywołanie narzędzia ze skutkiem ubocznym (FR-4.28c), gdy przebieg nie jest już aktywny. Hook sprawdza etykiety, wyłącznik globalny (FR-4.34) i magazyn stanu w chwili wywołania, a błąd sprawdzenia blokuje wywołanie (SEC-9.0a).
+- **SEC-9.8a** każde wywołanie narzędzia ze skutkiem ubocznym (FR-4.28c), gdy przebieg nie jest już aktywny. Hook sprawdza etykiety, stan PR przebiegu (FR-4.35), wyłącznik globalny (FR-4.34) i magazyn stanu w chwili wywołania, a błąd sprawdzenia blokuje wywołanie (SEC-9.0a).
 
 Po wywołaniu narzędzia hook:
 
@@ -472,7 +478,7 @@ Gdy agent zgłasza zakończenie pracy:
 | Komentarz do review poza review albo komentarz pod PR | Zarządzany PR, autor ma prawo zapisu | Obsługa po opóźnieniu (FR-4.22) |
 | Check run lub check suite zakończony niepowodzeniem | Branch issue danego przebiegu | Przekazanie błędu do Developera (FR-4.12) |
 | Z issue zdjęta etykieta `needs-human` | Przebieg jest w `needs-human` | Wznowienie przebiegu (FR-4.32) |
-| PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w stanie aktywnym | Przejście przebiegu do `done` |
+| PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w stanie aktywnym | Przejście przebiegu do `done` (FR-4.35) |
 | PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w `stopped` | Zapis zdarzenia w logu, bez zmiany stanu (FR-4.28) |
 
 Podpis każdego payloadu jest weryfikowany, a jego treść traktowana jako niezaufana (SEC-8.5, SEC-8.8).
