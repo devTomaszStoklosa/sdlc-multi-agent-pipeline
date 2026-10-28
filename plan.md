@@ -41,7 +41,7 @@ stateDiagram-v2
     done --> [*]
 ```
 
-Etykieta gotowości to `agent:ready`, a etykieta akceptacji planu to `plan:approved`. Z każdego stanu aktywnego przebieg przechodzi do `stopped` po etykiecie `agent:stop`, a z każdego stanu pracy do `needs-human` po wyczerpaniu ponowień albo limitów (spec 4.1, 4.2). Ze stanu `needs-human` wraca do stanu, w którym się zatrzymał, gdy człowiek zdejmie etykietę. Ze stanów `stopped` i `done` nie ma przejść: dalszą pracę nad issue rozpoczyna nowy przebieg (FR-4.28b).
+Etykieta gotowości to `agent:ready`, a etykieta akceptacji planu to `plan:approved`. Z każdego stanu aktywnego przebieg przechodzi do `stopped` po etykiecie `agent:stop`, a z każdego stanu pracy do `needs-human` po wyczerpaniu ponowień albo limitów (spec 4.1, 4.2). Ze stanu `needs-human` wraca do stanu sprzed eskalacji, gdy człowiek zdejmie etykietę. Ze stanów `stopped` i `done` nie ma przejść: dalszą pracę nad issue rozpoczyna nowy przebieg (FR-4.28b).
 
 W MVP działa jeden aktywny przebieg naraz. Pozostałe czekają w `queued`. Powód: limity planu Claude Pro (rozdz. 2.1).
 
@@ -250,7 +250,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 - **Zakres:** prompt Developera, sesja bez tokenu GitHub, commit i push wykonywane przez kod joba, Conventional Commits z odwołaniem do issue, draft PR z `Closes #<numer>`, issue spoza zakresu, aktualizacja planu z powodem, powrót do Developera po niezaliczonej bramce, bramka zakresu `gates/scope` w CI repozytorium demo. W nowym przebiegu po zatrzymaniu: kontynuacja brancha otwartego PR ze scaleniem `main` przez kod joba przed sesją agenta albo nowy branch i nowy draft PR, gdy poprzedni PR zamknięto.
 - **Wymagania:** FR-4.7 do FR-4.12, FR-4.28b, QG-7.9, QG-7.11.
-- **Gotowe, gdy:** prosta funkcja z issue testowego przechodzi bramki, plik spoza planu zatrzymuje bramkę zakresu, a niezaliczona bramka wraca do Developera bez zużycia rundy review.
+- **Gotowe, gdy:** prosta funkcja z issue testowego przechodzi bramki, plik spoza planu nie przechodzi bramki zakresu, a niezaliczona bramka wraca do Developera bez zużycia rundy review.
 - **Zależy od:** P5.
 
 ### P7. Reviewer i pętla review

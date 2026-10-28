@@ -53,6 +53,7 @@ Pipeline wyspecjalizowanych agentów AI (Orchestrator, Planner, Developer, Revie
 - **Wyjątek (waiver):** decyzja człowieka o zaakceptowaniu niezaliczonej bramki, zapisana w PR.
 - **Obejście (bypass):** merge PR bez zaliczonego checku `agent-review`, wykonany przez człowieka z listy obejść (FR-6.3). Nie jest wyjątkiem, bo nie dotyczy bramek z sekcji 7.
 - **Eskalacja:** przebieg przechodzi w stan `needs-human`, a agenci przestają nad nim pracować, dopóki człowiek nie zadziała.
+- **Zatrzymanie:** przejście przebiegu do końcowego stanu `stopped` po dodaniu `agent:stop` albo włączeniu wyłącznika globalnego (FR-4.28, FR-4.34). Słowo „zatrzymać” oznacza w tej specyfikacji wyłącznie to przejście; przejście do `needs-human` to eskalacja.
 - **Wyłącznik globalny:** przełącznik dla repozytorium albo organizacji, który zatrzymuje wszystkie przebiegi w swoim zakresie i blokuje start nowych (FR-4.34).
 
 ### 1.6 Słowa kluczowe wymagań i identyfikatory
@@ -156,7 +157,7 @@ Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne*
 | `awaiting-human-review` | Człowiek zmergował lub zamknął PR | `done` |
 | dowolny stan aktywny | Człowiek dodaje `agent:stop` albo włącza wyłącznik globalny (FR-4.34) | `stopped` |
 | dowolny stan pracy | Wyczerpany budżet ponowień etapu albo osiągnięty limit kosztu lub czasu | `needs-human` |
-| `needs-human` | Człowiek usuwa etykietę `needs-human` | stan, w którym przebieg się zatrzymał |
+| `needs-human` | Człowiek usuwa etykietę `needs-human` | stan sprzed eskalacji |
 
 Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpoczyna nowy przebieg (FR-4.28b).
 
@@ -197,7 +198,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 - **FR-4.15** Przy `changes_requested` Developer MUSI zająć się każdym znaleziskiem blokującym. Jeśli Developer uważa znalezisko za błędne, odpowiada w wątku, podając uzasadnienie, zamiast zmieniać kod. Jeśli Reviewer zgłosi to samo znalezisko ponownie, FR-4.18 eskaluje przebieg.
 - **FR-4.16** W każdej rundzie po pierwszej Reviewer MUSI ponownie przejrzeć cały diff i sprawdzić, czy każde wcześniejsze znalezisko zostało rozwiązane.
 - **FR-4.17** Pętla kończy się werdyktem `approve`, gdy nie ma otwartego znaleziska blokującego. Otwarte znaleziska nieblokujące są wypisane w opisie PR.
-- **FR-4.18** Pętla MUSI się zatrzymać i przenieść przebieg do `needs-human`, gdy:
+- **FR-4.18** Pętla MUSI się zakończyć eskalacją przebiegu do `needs-human`, gdy:
   - osiągnięto skonfigurowany limit rund (domyślnie 3, ustawiany przez `review.max_rounds`); albo
   - to samo znalezisko blokujące (ta sama reguła w tym samym miejscu kodu, rozpoznawane po identyfikatorze znaleziska) zgłoszono drugi raz.
 
@@ -276,7 +277,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 - **FR-4.29** Etapy MUSZĄ być idempotentne i wznawialne. Stan przebiegu jest przechowywany poza sesjami agentów, żeby etap, który się wywrócił, mógł zostać wznowiony bez powtarzania skutków ubocznych.
 - **FR-4.30** Etap, który zawiedzie z przyczyn infrastrukturalnych, MUSI być ponawiany do skonfigurowanego budżetu (domyślnie 2, ustawiane przez `limits.stage_retries`). Potem przebieg przechodzi do `needs-human`.
 - **FR-4.31** Gdy przebieg osiągnie limit kosztu lub czasu (NFR-11.5), MUSI przejść do `needs-human`.
-- **FR-4.32** Gdy człowiek usunie etykietę `needs-human`, przebieg MUSI być kontynuowany od etapu, na którym się zatrzymał, z nowym budżetem rund. Komentarze dodane w międzyczasie są obsługiwane tak jak w sekcji 4.7.
+- **FR-4.32** Gdy człowiek usunie etykietę `needs-human`, przebieg MUSI być kontynuowany od etapu sprzed eskalacji, z nowym budżetem rund. Komentarze dodane w międzyczasie są obsługiwane tak jak w sekcji 4.7.
 - **FR-4.33** Pipeline MUSI działać wyłącznie na issue, o które został poproszony, oraz na branchach i PR, które sam utworzył. NIE MOŻE działać na PR z forków.
 - **FR-4.34** Pipeline MUSI mieć wyłącznik globalny dla repozytorium i dla organizacji, np. na wypadek incydentu albo nagłego wzrostu kosztów.
   - Włączenie wyłącznika MUSI zatrzymać (FR-4.28 do FR-4.28f) każdy przebieg w stanie aktywnym w jego zakresie, w czasie z NFR-4.28d. Dopóki wyłącznik jest włączony, w jego zakresie nie startuje żaden nowy przebieg. Dodanie `agent:ready` pipeline obsługuje wtedy tak jak przy obecnym `agent:stop` (FR-4.28b): zdejmuje etykietę i publikuje w issue komentarz, że pipeline jest wyłączony.
@@ -895,7 +896,7 @@ Wyprzedzające:
 |---|---|---|---|
 | M-F01 | Koszt przebiegu | Tokeny i koszt na przebieg, na etap i na rundę review | Rozliczenia, log zdarzeń |
 | M-F02 | Minuty runnera na przebieg | Minuty obliczeniowe na przebieg | CI |
-| M-F03 | Osiągnięcia limitu kosztu | Przebiegi zatrzymane przez limit kosztu ÷ przebiegi | Log zdarzeń |
+| M-F03 | Osiągnięcia limitu kosztu | Przebiegi zeskalowane po osiągnięciu limitu kosztu (FR-4.31) ÷ przebiegi | Log zdarzeń |
 | M-F04 | Trafienia w cache promptów | Tokeny wejściowe z cache ÷ tokeny wejściowe | Dane użycia API modelu |
 
 Opóźnione:
