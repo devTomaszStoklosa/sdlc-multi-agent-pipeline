@@ -41,7 +41,7 @@ stateDiagram-v2
     done --> [*]
 ```
 
-Etykieta gotowości to `agent:ready`, a etykieta akceptacji planu to `plan:approved`. Z każdego aktywnego stanu przebieg przechodzi do `stopped` po etykiecie `agent:stop` oraz do `needs-human` po wyczerpaniu ponowień albo limitów (spec 4.2). Ze stanu `needs-human` wraca do stanu, w którym się zatrzymał, gdy człowiek zdejmie etykietę.
+Etykieta gotowości to `agent:ready`, a etykieta akceptacji planu to `plan:approved`. Z każdego stanu aktywnego przebieg przechodzi do `stopped` po etykiecie `agent:stop`, a z każdego stanu pracy do `needs-human` po wyczerpaniu ponowień albo limitów (spec 4.1, 4.2). Ze stanu `needs-human` wraca do stanu, w którym się zatrzymał, gdy człowiek zdejmie etykietę. Ze stanów `stopped` i `done` nie ma przejść: dalszą pracę nad issue rozpoczyna nowy przebieg (FR-4.28b).
 
 W MVP działa jeden aktywny przebieg naraz. Pozostałe czekają w `queued`. Powód: limity planu Claude Pro (rozdz. 2.1).
 
@@ -86,8 +86,8 @@ MVP nie może generować żadnych opłat poza istniejącą subskrypcją Claude P
 | Limit planu Pro | Trafienie w limit planu jest błędem infrastrukturalnym (FR-4.30). Po wyczerpaniu ponowień przebieg przechodzi do `needs-human` z komentarzem, kiedy limit się odnowi. Człowiek wznawia przebieg zdjęciem etykiety (FR-4.32). | Spec nie przewiduje limitów subskrypcji; to najbliższy istniejący mechanizm. | Automatyczne czekanie w jobie (blokuje runner, przekracza limit czasu). |
 | GitHub App (OQ-8, SEC-8.1) | Jedna aplikacja bez uprawnienia `workflows`. Tokeny zawężane per rola przez `actions/create-github-app-token` z parametrami `permission-*`, zgodnie z tabelą zakresów w spec 5. | Tylko ludzie zmieniają CI; każda rola ma minimalne uprawnienia. | Osobna aplikacja na rolę (więcej kluczy do ochrony). |
 | Właściciel pipeline'u (OQ-11) | Autor jest właścicielem i operatorem. Do potwierdzenia. | Projekt jednoosobowy. | — |
-| Ponowne uruchomienie po `agent:stop` (FR-4.28) | Nowy przebieg wymaga zdjęcia `agent:stop` przez człowieka. `agent:ready` przy obecnej etykiecie `agent:stop` jest ignorowane. | Spec tego nie rozstrzyga; doprecyzowanie w issue #4. | Automatyczne zdejmowanie `agent:stop` przez pipeline. |
-| Zatrzymanie przebiegu (FR-4.28, SEC-8.9) | Osobny workflow `stop.yml` poza grupą `concurrency`, uruchamiany dodaniem etykiety `agent:stop` do issue lub PR. Anuluje aktywny run przebiegu (identyfikator z komentarza ze stanem) tokenem `GITHUB_TOKEN` z uprawnieniem `actions: write` nadanym tylko temu jobowi. Potem zapisuje stan `stopped` i publikuje podsumowanie tokenem App zawężonym do `issues: write`. Kod jobów sprawdza etykietę przed każdym skutkiem ubocznym (rozdz. 3.2). | Zatrzymanie nie czeka na koniec joba roli (do 45 minut) i żadne inne zdarzenie nie anuluje go w kolejce. | Obsługa w `orchestrate.yml` w grupie per issue (czeka w kolejce i może zostać z niej usunięta); obsługa w `orchestrate.yml` z grupą zależną od etykiety (`actions: write` dla całego Orchestratora); samo sprawdzanie etykiety bez anulowania runu (agent pracuje dalej i zużywa limit Pro); `actions: write` dla GitHub App (szersze uprawnienia aplikacji i zmiana kroku ręcznego). |
+| Ponowne uruchomienie po `agent:stop` (FR-4.28b) | Job `decide` odrzuca `agent:ready`, gdy issue lub jego otwarty PR ma `agent:stop`: zdejmuje etykietę i publikuje komentarz. Nowy przebieg z otwartym PR kontynuuje jego branch, a kod joba Developera przed sesją agenta scala do niego aktualny `main` commitem merge; konflikty rozwiązuje Developer w sesji. Bez otwartego PR przebieg tworzy nowy branch i nowy draft PR. | Spec 4.8 po doprecyzowaniu w issue #4. Scalanie wykonuje kod joba, bo agent nie ma dostępu do GitHuba (rozdz. 3.2). | Automatyczne zdejmowanie `agent:stop` przez pipeline (cofa decyzję człowieka, SEC-9.8); ciche ignorowanie `agent:ready` (etykieta zostaje, a późniejsze zdjęcie `agent:stop` niczego nie uruchamia). |
+| Zatrzymanie przebiegu (FR-4.28, SEC-8.9) | Osobny workflow `stop.yml` poza grupą `concurrency`, uruchamiany dodaniem etykiety `agent:stop` do issue lub PR. Anuluje aktywny run przebiegu (identyfikator z komentarza ze stanem) tokenem `GITHUB_TOKEN` z uprawnieniem `actions: write` nadanym tylko temu jobowi. Potem zapisuje stan `stopped`, zdejmuje `agent:ready` i `plan:approved`, kończy check run `agent-review` w toku wynikiem `cancelled` (FR-4.28a) i publikuje podsumowanie tokenem App zawężonym do `issues: write` i `checks: write`. Kod jobów sprawdza etykietę przed każdym skutkiem ubocznym (rozdz. 3.2). | Zatrzymanie nie czeka na koniec joba roli (do 45 minut) i żadne inne zdarzenie nie anuluje go w kolejce. | Obsługa w `orchestrate.yml` w grupie per issue (czeka w kolejce i może zostać z niej usunięta); obsługa w `orchestrate.yml` z grupą zależną od etykiety (`actions: write` dla całego Orchestratora); samo sprawdzanie etykiety bez anulowania runu (agent pracuje dalej i zużywa limit Pro); `actions: write` dla GitHub App (szersze uprawnienia aplikacji i zmiana kroku ręcznego). |
 
 ---
 
@@ -156,7 +156,7 @@ flowchart LR
 - Workflow `orchestrate.yml` uruchamiają zdarzenia `issues` (labeled, unlabeled), `issue_comment`, `pull_request` (closed) i `workflow_run` po zakończeniu workflow bramek.
 - Job `filter` działa poza grupą `concurrency` i nie wywołuje modelu. Odrzuca zdarzenia od botów, komentarze autorów spoza współpracowników repozytorium (`author_association`) oraz dodanie `agent:stop`, które obsługuje `stop.yml`. Ustala też numer issue, który jest kluczem grupy. Dokładne sprawdzenie uprawnień autora wykonuje `decide` (rozdz. 4).
 - Joby `decide` i roli należą do grupy `concurrency` per issue z `cancel-in-progress: false`, więc w przebiegu działa jeden job naraz. Job `decide` liczy przejście, zapisuje stan z identyfikatorem runu i warunkowo startuje job roli.
-- Workflow `stop.yml` uruchamia dodanie etykiety `agent:stop` do issue lub PR. Działa poza grupą, więc nie czeka na koniec joba roli. Anuluje aktywny run przebiegu, zapisuje stan `stopped` i publikuje podsumowanie (rozdz. 2.2). Runy, które czekały w grupie, po starcie widzą etykietę i kończą się bez akcji.
+- Workflow `stop.yml` uruchamia dodanie etykiety `agent:stop` do issue lub PR. Działa poza grupą, więc nie czeka na koniec joba roli. Anuluje aktywny run przebiegu, zapisuje stan `stopped`, porządkuje etykiety i check run `agent-review` (FR-4.28a) i publikuje podsumowanie (rozdz. 2.2). Runy, które czekały w grupie, po starcie widzą etykietę i kończą się bez akcji.
 - Wyniki bramek pipeline odbiera przez `workflow_run`, bo zdarzenie `check_suite` nie uruchamia workflow dla suite'ów utworzonych przez GitHub Actions.
 - Pushe wykonuje token GitHub App, więc uruchamiają CI. Pushe tokenem `GITHUB_TOKEN` by go nie uruchomiły.
 
@@ -232,22 +232,22 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 ### P4. Orchestrator i magazyn stanu
 
-- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu, `orchestrate.yml`, `stop.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
+- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu, `orchestrate.yml`, `stop.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop` z porządkowaniem etykiet i check runa, odrzucanie `agent:ready` przy obecnym `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
 - **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, NFR-11.3 do NFR-11.5.
-- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec. Po zatrzymaniu nie ma żadnych skutków ubocznych, a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania.
+- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec. Po zatrzymaniu nie ma żadnych skutków ubocznych, a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania. Ponowne `agent:ready` po zdjęciu `agent:stop` startuje nowy przebieg, a `agent:ready` przy obecnym `agent:stop` zostaje zdjęte z komentarzem.
 - **Zależy od:** P2, P3.
 
 ### P5. Planner
 
-- **Zakres:** prompt Plannera, komentarz z planem i blokiem `sdlc-plan` w YAML (lista plików z jednym zdaniem uzasadnienia przy każdym), klasyfikacja high-impact jako suma reguł deterministycznych (ścieżki z konfiguracji, manifesty zależności, pliki CI, `.sdlc-agents.yml`, limity rozmiaru) i oceny modelu (bezpieczeństwo, publiczne API). Suma, bo przeoczenie zmiany high-impact jest droższe niż fałszywy alarm (spec 12.2). Każda wersja planu jako osobny komentarz z numerem. Akceptacja etykietą `plan:approved` i poprawki po komentarzu człowieka.
-- **Wymagania:** FR-4.3 do FR-4.6, FR-6.1, FR-10.3, SEC-8.5, SEC-8.10.
+- **Zakres:** prompt Plannera, komentarz z planem i blokiem `sdlc-plan` w YAML (lista plików z jednym zdaniem uzasadnienia przy każdym), klasyfikacja high-impact jako suma reguł deterministycznych (ścieżki z konfiguracji, manifesty zależności, pliki CI, `.sdlc-agents.yml`, limity rozmiaru) i oceny modelu (bezpieczeństwo, publiczne API). Suma, bo przeoczenie zmiany high-impact jest droższe niż fałszywy alarm (spec 12.2). Każda wersja planu jako osobny komentarz z numerem. Akceptacja etykietą `plan:approved` i poprawki po komentarzu człowieka. W nowym przebiegu po zatrzymaniu Planner dostaje poprzednie plany, podsumowanie zatrzymania, nowe komentarze i diff brancha.
+- **Wymagania:** FR-4.3 do FR-4.6, FR-4.28b, FR-6.1, FR-10.3, SEC-8.5, SEC-8.10.
 - **Gotowe, gdy:** na trzech issue testowych plan ma wszystkie elementy z FR-4.3, zmiana z nową zależnością jest sklasyfikowana jako high-impact, a przebieg czeka na `plan:approved`.
 - **Zależy od:** P4.
 
 ### P6. Developer i bramka zakresu
 
-- **Zakres:** prompt Developera, sesja bez tokenu GitHub, commit i push wykonywane przez kod joba, Conventional Commits z odwołaniem do issue, draft PR z `Closes #<numer>`, issue spoza zakresu, aktualizacja planu z powodem, powrót do Developera po niezaliczonej bramce, bramka zakresu `gates/scope` w CI repozytorium demo.
-- **Wymagania:** FR-4.7 do FR-4.12, QG-7.9, QG-7.11.
+- **Zakres:** prompt Developera, sesja bez tokenu GitHub, commit i push wykonywane przez kod joba, Conventional Commits z odwołaniem do issue, draft PR z `Closes #<numer>`, issue spoza zakresu, aktualizacja planu z powodem, powrót do Developera po niezaliczonej bramce, bramka zakresu `gates/scope` w CI repozytorium demo. W nowym przebiegu po zatrzymaniu: kontynuacja brancha otwartego PR ze scaleniem `main` przez kod joba przed sesją agenta albo nowy branch i nowy draft PR, gdy poprzedni PR zamknięto.
+- **Wymagania:** FR-4.7 do FR-4.12, FR-4.28b, QG-7.9, QG-7.11.
 - **Gotowe, gdy:** prosta funkcja z issue testowego przechodzi bramki, plik spoza planu zatrzymuje bramkę zakresu, a niezaliczona bramka wraca do Developera bez zużycia rundy review.
 - **Zależy od:** P5.
 
@@ -295,7 +295,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | FR-4.20 | Częściowo | P7 | Bez URL środowiska dev do F3. |
 | FR-4.21, FR-4.22, FR-4.24, FR-4.25, FR-4.26, FR-4.27 | Później | F2 | |
 | FR-4.23 | MVP | P4 | Filtr autorów potrzebny już w MVP (rozdz. 4). |
-| FR-4.28 | MVP | P4 | Z interpretacją z rozdz. 2.2, issue #4. |
+| FR-4.28, FR-4.28a, FR-4.28b | MVP | P4 do P6 | Porzucanie obsługi komentarzy po opóźnieniu i zwalnianie blokady dev (FR-4.28a) wchodzą razem z F2 i F3. |
 | FR-4.29, FR-4.30, FR-4.31, FR-4.33 | MVP | P4 | FR-4.31: limit kosztu jako szacunek zużycia. |
 | FR-4.32 | Częściowo | P4 | Komentarze z czasu przerwy obsługuje F2. |
 

@@ -43,7 +43,7 @@ Pipeline wyspecjalizowanych agentów AI (Orchestrator, Planner, Developer, Revie
 
 ### 1.5 Terminy
 
-- **Przebieg (run):** całe przetwarzanie jednego issue, od etykiety `agent:ready` do zmergowania lub zamknięcia PR albo zatrzymania przebiegu.
+- **Przebieg (run):** przetwarzanie jednego issue, od etykiety `agent:ready` do zmergowania lub zamknięcia PR albo zatrzymania przebiegu. Po zatrzymaniu issue może mieć kolejny przebieg (FR-4.28b).
 - **Etap (stage):** jeden krok przebiegu (np. planowanie, implementacja, review).
 - **Bramka (gate):** automatyczne sprawdzenie, które musi przejść (np. testy, SAST, bramka zakresu).
 - **Runda (round):** jedno review diffu przez Reviewera plus poprawki Developera, które po nim następują.
@@ -128,11 +128,13 @@ Historyjki użytkownika:
 | `stopped` | Człowiek dodał `agent:stop`. |
 | `done` | Człowiek zmergował lub zamknął PR. |
 
+Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne**. Wśród nich `queued`, `awaiting-plan-approval`, `awaiting-human-review` i `needs-human` to **stany oczekiwania**, w których żaden agent nie pracuje. Pozostałe stany aktywne to **stany pracy**.
+
 ### 4.2 Przejścia między stanami
 
 | Z | Zdarzenie | Do |
 |---|---|---|
-| (brak) | Uprawniony użytkownik dodaje `agent:ready` do issue | `queued` |
+| (brak aktywnego przebiegu) | Uprawniony użytkownik dodaje `agent:ready` do issue, a ani issue, ani jego otwarty PR nie mają `agent:stop` | `queued` (nowy przebieg) |
 | `queued` | Jest wolna przepustowość | `planning` |
 | `planning` | Plan opublikowany, zmiana nie jest high-impact | `developing` |
 | `planning` | Plan opublikowany, zmiana jest high-impact | `awaiting-plan-approval` |
@@ -151,8 +153,10 @@ Historyjki użytkownika:
 | `handling-comments` | Potrzebna jest zmiana kodu | `developing` |
 | `awaiting-human-review` | Człowiek zmergował lub zamknął PR | `done` |
 | dowolny stan aktywny | Człowiek dodaje `agent:stop` | `stopped` |
-| dowolny stan aktywny | Wyczerpany budżet ponowień etapu albo osiągnięty limit kosztu lub czasu | `needs-human` |
+| dowolny stan pracy | Wyczerpany budżet ponowień etapu albo osiągnięty limit kosztu lub czasu | `needs-human` |
 | `needs-human` | Człowiek usuwa etykietę `needs-human` | stan, w którym przebieg się zatrzymał |
+
+Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpoczyna nowy przebieg (FR-4.28b).
 
 ### 4.3 Intake i planowanie
 
@@ -235,7 +239,20 @@ Historyjki użytkownika:
 
 ### 4.8 Kontrola przebiegu
 
-- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg. Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze, a pipeline publikuje krótkie podsumowanie. Zatrzymany przebieg pozostaje zatrzymany. Ponowne dodanie `agent:ready` rozpoczyna nowy przebieg na tym samym issue i branchu.
+- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1). Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze, a pipeline publikuje krótkie podsumowanie. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
+- **FR-4.28a** Przy zatrzymaniu pipeline MUSI:
+  - zdjąć z issue etykiety `agent:ready` i `plan:approved`, żeby ponowne dodanie `agent:ready` wysłało zdarzenie GitHuba, a akceptacja planu nie przeszła na kolejny przebieg;
+  - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled`. Wymagany check nadal blokuje merge (FR-6.3);
+  - porzucić zaplanowane działania przebiegu: obsługę komentarzy po opóźnieniu (FR-4.22) i ponowienia etapu (FR-4.30);
+  - zwolnić blokadę współdzielonego środowiska dev, jeśli przebieg ją trzyma (OQ-2).
+
+  Pipeline nie zmienia przy tym PR (stanu draftu ani próśb o review), nie anuluje trwających bramek CI i nie cofa commitów. Wyniki bramek, które zakończą się po zatrzymaniu, nie zmieniają stanu przebiegu. Przerwane wdrożenie na dev nie jest wycofywane, a podsumowanie informuje, że środowisko dev może być w niespójnym stanie.
+- **FR-4.28b** Nowy przebieg po zatrzymaniu rozpoczyna dodanie `agent:ready` (FR-4.1), gdy ani issue, ani jego otwarty PR nie mają `agent:stop`. Etykietę `agent:stop` zdejmuje wyłącznie człowiek (SEC-9.8), a samo jej zdjęcie nie rozpoczyna przebiegu.
+  - Dodanie `agent:ready`, gdy issue lub jego otwarty PR ma `agent:stop`, NIE MOŻE rozpocząć przebiegu. Pipeline zdejmuje wtedy dodaną etykietę `agent:ready` i publikuje w issue komentarz, że najpierw trzeba zdjąć `agent:stop`. Pipeline rozstrzyga na podstawie etykiet w chwili obsługi zdarzenia, a nie kolejności zdarzeń, więc issue z obiema etykietami nie ma aktywnego przebiegu.
+  - Nowy przebieg zaczyna od `queued` i `planning`. Planner dostaje poprzednie wersje planu, podsumowanie zatrzymania, komentarze dodane od zatrzymania oraz diff brancha względem głównego brancha. Akceptacja planu z poprzedniego przebiegu nie przechodzi na nowy przebieg, więc plan high-impact czeka na nowe `plan:approved` (FR-4.6).
+  - Nowy przebieg ma nowe budżety: limit rund review (FR-4.18), ponowień etapu (FR-4.30) oraz kosztu i czasu (NFR-11.5). Metryki liczone na issue lub PR obejmują wszystkie jego przebiegi (sekcja 14.1).
+  - Jeśli issue ma otwarty PR utworzony przez pipeline, nowy przebieg kontynuuje pracę na jego branchu. Commity poprzedniego przebiegu i commity dodane przez człowieka są częścią zmiany: Planner uwzględnia je w planie, a bramki i Reviewer oceniają cały diff (FR-4.13). Zbędne zmiany Developer cofa nowymi commitami. Jeśli branch jest za głównym branchem, Developer na początku implementacji MUSI scalić do niego aktualny główny branch commitem merge z komunikatem zgodnym z FR-4.9. Rebase i force-push są zabronione (SEC-9.2, SEC-9.5).
+  - Jeśli issue nie ma otwartego PR, bo człowiek zamknął PR albo usunął jego branch, nowy przebieg zaczyna od zera: tworzy nowy branch z aktualnego głównego brancha (FR-4.7) i nowy draft PR, który linkuje poprzedni. Nazwa nowego brancha MUSI różnić się od nazw istniejących branchy. Zamknięcie PR jest więc sposobem na rozpoczęcie pracy od zera.
 - **FR-4.29** Etapy MUSZĄ być idempotentne i wznawialne. Stan przebiegu jest przechowywany poza sesjami agentów, żeby etap, który się wywrócił, mógł zostać wznowiony bez powtarzania skutków ubocznych.
 - **FR-4.30** Etap, który zawiedzie z przyczyn infrastrukturalnych, MUSI być ponawiany do skonfigurowanego budżetu (domyślnie 2, ustawiane przez `limits.stage_retries`). Potem przebieg przechodzi do `needs-human`.
 - **FR-4.31** Gdy przebieg osiągnie limit kosztu lub czasu (NFR-11.5), MUSI przejść do `needs-human`.
@@ -392,7 +409,7 @@ Przed wywołaniem narzędzia hook blokuje:
 - **SEC-9.8** działania zarezerwowane dla ludzi:
   - merge lub włączenie auto-merge;
   - odrzucenie review lub oznaczenie wątku jako rozwiązanego;
-  - dodanie `plan:approved` lub usunięcie `needs-human`.
+  - dodanie `plan:approved`, usunięcie `needs-human` lub usunięcie `agent:stop`.
 
 Po wywołaniu narzędzia hook:
 
@@ -414,15 +431,17 @@ Gdy agent zgłasza zakończenie pracy:
 
 | Zdarzenie | Warunek | Działanie |
 |---|---|---|
-| Issue oznaczone `agent:ready` | Dodane przez użytkownika z uprawnieniem triage lub wyższym | Start przebiegu (FR-4.1) |
-| Issue lub PR oznaczone `agent:stop` | Dowolny aktywny przebieg | Zatrzymanie przebiegu (FR-4.28) |
+| Issue oznaczone `agent:ready` | Dodane przez użytkownika z uprawnieniem triage lub wyższym, brak aktywnego przebiegu, a ani issue, ani jego otwarty PR nie mają `agent:stop` | Start przebiegu (FR-4.1, FR-4.28b) |
+| Issue oznaczone `agent:ready` | Issue lub jego otwarty PR ma `agent:stop` | Zdjęcie `agent:ready` i komentarz w issue (FR-4.28b) |
+| Issue lub PR oznaczone `agent:stop` | Przebieg jest w stanie aktywnym (sekcja 4.1) | Zatrzymanie przebiegu (FR-4.28, FR-4.28a) |
 | Issue oznaczone `plan:approved` | Przebieg jest w `awaiting-plan-approval` | Przejście do `developing` |
 | Komentarz do issue | Przebieg jest w `awaiting-plan-approval`, autor ma prawo zapisu | Planner poprawia plan |
 | Wysłane review PR | Zarządzany PR, autor ma prawo zapisu | Obsługa wszystkich komentarzy review (FR-4.22) |
 | Komentarz do review poza review albo komentarz pod PR | Zarządzany PR, autor ma prawo zapisu | Obsługa po opóźnieniu (FR-4.22) |
 | Check run lub check suite zakończony niepowodzeniem | Branch issue danego przebiegu | Przekazanie błędu do Developera (FR-4.12) |
 | Z issue zdjęta etykieta `needs-human` | Przebieg jest w `needs-human` | Wznowienie przebiegu (FR-4.32) |
-| PR zamknięty lub zmergowany | Zarządzany PR | Przejście przebiegu do `done` |
+| PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w stanie aktywnym | Przejście przebiegu do `done` |
+| PR zamknięty lub zmergowany | Zarządzany PR, przebieg jest w `stopped` | Zapis zdarzenia w logu, bez zmiany stanu (FR-4.28) |
 
 Podpis każdego payloadu jest weryfikowany, a jego treść traktowana jako niezaufana (SEC-8.5, SEC-8.8).
 
@@ -684,6 +703,8 @@ Każda metryka ma identyfikator, nazwę, typ, definicję (wzór), źródło dany
 - **częstotliwość przeglądu** w pilotażu to tydzień dla wskaźników wyprzedzających i miesiąc dla opóźnionych;
 - **cel** jest ustalany po wyznaczeniu linii bazowej (sekcja 14.13), poza przypadkami, gdzie podano cel stały;
 - **kontr-metryki** są wymienione w sekcji 14.11.
+
+Jedno issue może mieć kilka kolejnych przebiegów, jeśli przebieg zatrzymano i uruchomiono ponownie (FR-4.28b). Metryki M-A01 do M-A06 liczą każdy przebieg osobno. M-A08 i M-A09 liczą czas od pierwszej etykiety `agent:ready` na issue. Koszt na issue i na PR (M-F05, M-F06) sumuje wszystkie przebiegi. PR zmergowany przez człowieka po zatrzymaniu przebiegu liczy się jako PR agenta, a zapis w logu zdarzeń (FR-4.28) pozwala go odfiltrować.
 
 Metryki mierzą pipeline i agentów, nigdy pojedynczych programistów. Żadna metryka nie służy do oceny osoby.
 
