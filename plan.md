@@ -81,12 +81,13 @@ MVP nie może generować żadnych opłat poza istniejącą subskrypcją Claude P
 | Dane (OQ-7) | Kod i treść issue trafiają do Anthropic w ramach subskrypcji konsumenckiej. O użyciu do trenowania decyduje ustawienie prywatności konta autora. | Repozytorium demo jest publiczne, więc ryzyko ujawnienia jest niskie. | — |
 | Repozytorium pilotażowe (OQ-1) | Nowe, publiczne repozytorium `sdlc-pipeline-sandbox` z małą aplikacją TypeScript. | Bezpieczne, przewidywalne, widoczne w portfolio, darmowe CI. | To repozytorium (każda zmiana pipeline'u jest high-impact); prawdziwy projekt (za wcześnie). |
 | Orchestrator (FR-5.6) | Reusable workflows w tym repozytorium, wywoływane z repozytorium demo. Sterowanie jest deterministycznym kodem TypeScript; w MVP Orchestrator nie wywołuje modelu. | Brak serwera do utrzymania; zdarzenia GitHuba bez publicznego endpointu. | Własny serwer webhooków z bazą danych (hosting i koszt od pierwszego dnia). |
-| Magazyn stanu (FR-4.29) | Ukryty komentarz JSON autorstwa bota w issue, z wersją schematu. `concurrency` per issue. | Zero infrastruktury. | Zewnętrzna baza danych (konto, sekret, allowlista sieci). |
+| Magazyn stanu (FR-4.29) | Ukryty komentarz JSON autorstwa bota w issue, z wersją schematu i identyfikatorem aktywnego runu workflow. Grupa `concurrency` per issue na poziomie jobów `decide` i roli, z `cancel-in-progress: false`. Do grupy trafiają tylko zdarzenia, które przeszły filtr autorów (rozdz. 3.5). | Zero infrastruktury. Zdarzenia od obcych nie wchodzą do kolejki przebiegu i nie anulują czekających w niej runów. | Zewnętrzna baza danych (konto, sekret, allowlista sieci); grupa na poziomie całego workflow (każde zdarzenie, także od obcych, zajmuje miejsce w kolejce); `cancel-in-progress: true` (każde zdarzenie przerywa pracującego agenta). |
 | Limity (OQ-3, OQ-5) | `high_impact.max_files: 10`, `high_impact.max_changed_lines: 400`, `limits.max_minutes_per_run: 45`, nowe pole `limits.max_turns_per_stage`. `limits.max_cost_usd_per_run` liczony z szacunku kosztu raportowanego przez Claude Code, jako miara zużycia, a nie wydatku. | Ostrożne MVP i limity planu Pro. | Wartości przykładowe ze spec 10 ($20, 120 minut). |
 | Limit planu Pro | Trafienie w limit planu jest błędem infrastrukturalnym (FR-4.30). Po wyczerpaniu ponowień przebieg przechodzi do `needs-human` z komentarzem, kiedy limit się odnowi. Człowiek wznawia przebieg zdjęciem etykiety (FR-4.32). | Spec nie przewiduje limitów subskrypcji; to najbliższy istniejący mechanizm. | Automatyczne czekanie w jobie (blokuje runner, przekracza limit czasu). |
 | GitHub App (OQ-8, SEC-8.1) | Jedna aplikacja bez uprawnienia `workflows`. Tokeny zawężane per rola przez `actions/create-github-app-token` z parametrami `permission-*`, zgodnie z tabelą zakresów w spec 5. | Tylko ludzie zmieniają CI; każda rola ma minimalne uprawnienia. | Osobna aplikacja na rolę (więcej kluczy do ochrony). |
 | Właściciel pipeline'u (OQ-11) | Autor jest właścicielem i operatorem. Do potwierdzenia. | Projekt jednoosobowy. | — |
 | Ponowne uruchomienie po `agent:stop` (FR-4.28) | Nowy przebieg wymaga zdjęcia `agent:stop` przez człowieka. `agent:ready` przy obecnej etykiecie `agent:stop` jest ignorowane. | Spec tego nie rozstrzyga; doprecyzowanie w issue #4. | Automatyczne zdejmowanie `agent:stop` przez pipeline. |
+| Zatrzymanie przebiegu (FR-4.28, SEC-8.9) | Osobny workflow `stop.yml` poza grupą `concurrency`, uruchamiany dodaniem etykiety `agent:stop` do issue lub PR. Anuluje aktywny run przebiegu (identyfikator z komentarza ze stanem) tokenem `GITHUB_TOKEN` z uprawnieniem `actions: write` nadanym tylko temu jobowi. Potem zapisuje stan `stopped` i publikuje podsumowanie tokenem App zawężonym do `issues: write`. Kod jobów sprawdza etykietę przed każdym skutkiem ubocznym (rozdz. 3.2). | Zatrzymanie nie czeka na koniec joba roli (do 45 minut) i żadne inne zdarzenie nie anuluje go w kolejce. | Obsługa w `orchestrate.yml` w grupie per issue (czeka w kolejce i może zostać z niej usunięta); obsługa w `orchestrate.yml` z grupą zależną od etykiety (`actions: write` dla całego Orchestratora); samo sprawdzanie etykiety bez anulowania runu (agent pracuje dalej i zużywa limit Pro); `actions: write` dla GitHub App (szersze uprawnienia aplikacji i zmiana kroku ręcznego). |
 
 ---
 
@@ -102,6 +103,8 @@ Kod pipeline'u podlega tym samym zasadom co kod tworzony przez agentów (spec 7.
 ### 3.2 Zasada: agent bez dostępu do GitHuba
 
 Sesje agentów nie dostają żadnego tokenu GitHub. Agent pracuje tylko na przestrzeni roboczej i kończy pracę wynikiem w JSON: planem, komunikatem commita, werdyktem ze znaleziskami, odpowiedziami w wątkach albo listą issue spoza zakresu. Kod joba waliduje ten wynik schematem i dopiero wtedy wykonuje skutki uboczne w GitHubie tokenem roli: komentarze, commit, push, draft PR, check run, prośbę o review.
+
+Przed każdym skutkiem ubocznym kod joba sprawdza, czy issue lub PR nie ma etykiety `agent:stop`. Jeśli ma, job kończy się bez akcji. O zatrzymaniu rozstrzyga etykieta, a nie komentarz ze stanem, więc spóźniony zapis stanu nie cofnie zatrzymania (FR-4.28).
 
 Dzięki temu zakazy z SEC-9.2, SEC-9.6, SEC-9.7 i SEC-9.8 są wymuszone strukturalnie: agent nie ma czym wykonać zakazanej akcji. Hooki z spec 9.2 są drugą warstwą (SEC-9.0c), a nie jedyną. Ta zasada zmniejsza też skutki prompt injection (SEC-8.5), bo wstrzyknięta instrukcja może zmienić najwyżej treść wyniku, który i tak przechodzi walidację.
 
@@ -136,18 +139,24 @@ Prompty ról są wersjonowane w `prompts/` (FR-5.8). Dokładne flagi CLI zostan�
 
 ```mermaid
 flowchart LR
-    E["Zdarzenie GitHuba<br/>issues, issue_comment,<br/>pull_request, workflow_run"] --> D["Job decide<br/>bez modelu i bez tokenu Claude"]
+    E["Zdarzenie GitHuba<br/>issues, issue_comment,<br/>pull_request, workflow_run"] --> F["Job filter<br/>poza grupą concurrency"]
+    F -->|autor dopuszczony| D["Job decide<br/>grupa per issue,<br/>bez modelu i bez tokenu Claude"]
     D -->|zapis stanu| S[("Komentarz ze stanem<br/>w issue")]
-    D -->|start roli| R["Job roli<br/>środowisko agents"]
+    D -->|start roli| R["Job roli<br/>grupa per issue,<br/>środowisko agents"]
     R --> C["claude -p<br/>hooki, lista narzędzi,<br/>brak tokenu GitHub"]
-    C -->|wynik JSON| W["Kod joba<br/>walidacja schematu"]
+    C -->|wynik JSON| W["Kod joba<br/>walidacja schematu,<br/>sprawdzenie agent:stop"]
     W -->|token roli z GitHub App| G["GitHub<br/>komentarze, commit, push,<br/>draft PR, check run"]
     G -->|push| CI["Workflow bramek"]
     CI -->|workflow_run| E
+    T["Etykieta agent:stop"] --> X["Workflow stop.yml<br/>poza grupą concurrency"]
+    X -->|anulowanie runu| R
+    X -->|stan stopped| S
 ```
 
 - Workflow `orchestrate.yml` uruchamiają zdarzenia `issues` (labeled, unlabeled), `issue_comment`, `pull_request` (closed) i `workflow_run` po zakończeniu workflow bramek.
-- Job `decide` liczy przejście, zapisuje stan i warunkowo startuje job roli.
+- Job `filter` działa poza grupą `concurrency` i nie wywołuje modelu. Odrzuca zdarzenia od botów, komentarze autorów spoza współpracowników repozytorium (`author_association`) oraz dodanie `agent:stop`, które obsługuje `stop.yml`. Ustala też numer issue, który jest kluczem grupy. Dokładne sprawdzenie uprawnień autora wykonuje `decide` (rozdz. 4).
+- Joby `decide` i roli należą do grupy `concurrency` per issue z `cancel-in-progress: false`, więc w przebiegu działa jeden job naraz. Job `decide` liczy przejście, zapisuje stan z identyfikatorem runu i warunkowo startuje job roli.
+- Workflow `stop.yml` uruchamia dodanie etykiety `agent:stop` do issue lub PR. Działa poza grupą, więc nie czeka na koniec joba roli. Anuluje aktywny run przebiegu, zapisuje stan `stopped` i publikuje podsumowanie (rozdz. 2.2). Runy, które czekały w grupie, po starcie widzą etykietę i kończą się bez akcji.
 - Wyniki bramek pipeline odbiera przez `workflow_run`, bo zdarzenie `check_suite` nie uruchamia workflow dla suite'ów utworzonych przez GitHub Actions.
 - Pushe wykonuje token GitHub App, więc uruchamiają CI. Pushe tokenem `GITHUB_TOKEN` by go nie uruchomiły.
 
@@ -178,6 +187,7 @@ W repozytorium publicznym każdy może założyć issue i dodać komentarz, a lo
 |---|---|---|---|---|
 | Token tylko w jobach ról | `CLAUDE_CODE_OAUTH_TOKEN` jest sekretem środowiska GitHub `agents` z polityką „tylko branch `main`”. Odwołują się do niego wyłącznie joby ról. Job `decide` i workflow bramek go nie widzą. | SEC-8.2 | P3, P4 | P3: workflow bez środowiska `agents` nie ma tokenu |
 | Bramka przed modelem | Job roli startuje tylko wtedy, gdy `decide` potwierdzi, że etykietę dodał użytkownik z co najmniej triage, a komentarz napisał użytkownik z prawem zapisu, który nie jest botem. Issue i komentarze od obcych uruchamiają tylko `decide`, który kończy się bez wywołania modelu. | FR-4.1, FR-4.23, SEC-8.6, SEC-8.7 | P4 | Testy jednostkowe dla każdego typu autora |
+| Zatrzymanie poza kolejką | Zdarzenia od obcych odpadają w jobie `filter`, zanim trafią do grupy `concurrency`, więc nie opóźniają zdarzeń przebiegu ani nie usuwają ich z kolejki. `agent:stop` obsługuje osobny workflow poza grupą (rozdz. 2.2, 3.5). | FR-4.28, SEC-8.6, SEC-8.9 | P4 | Testy joba `filter`; zatrzymanie w trakcie joba roli z równoległymi komentarzami obcych w P4 |
 | Brak zdarzeń z forków | Zakaz `pull_request_target` w obu repozytoriach. `workflow_run` jest obsługiwany tylko wtedy, gdy branch pochodzi z repozytorium demo i należy do aktywnego przebiegu. Bramki działają na `pull_request`, które nie dostaje sekretów dla forków. | FR-4.33 | P3, P4 | Testy `decide`; przegląd workflow w P3 |
 | Ustawienia Actions | Zgoda na uruchomienie workflow dla wszystkich zewnętrznych współtwórców; domyślne uprawnienia `GITHUB_TOKEN` tylko do odczytu. | SEC-8.1 | P3 | Przegląd ustawień w P3 |
 | Agent nie zmienia workflow | GitHub App bez uprawnienia `workflows` (OQ-8). Hook i bramka zakresu dodatkowo blokują zmiany w `.github/`. | SEC-9.1, QG-7.9, QG-7.11 | P2, P3, P6 | Testy hooków; próba w P8 |
@@ -222,9 +232,9 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 ### P4. Orchestrator i magazyn stanu
 
-- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu, `orchestrate.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
+- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu, `orchestrate.yml`, `stop.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
 - **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, NFR-11.3 do NFR-11.5.
-- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, a zdarzenia od nieuprawnionych autorów nie startują żadnej roli.
+- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec. Po zatrzymaniu nie ma żadnych skutków ubocznych, a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania.
 - **Zależy od:** P2, P3.
 
 ### P5. Planner
@@ -385,7 +395,8 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Wyciek tokenu przez publiczne logi lub artefakty w postaci, której GitHub nie zamaskuje | Ktoś zużywa limity autora | Środki z rozdz. 4, przegląd logów w P8, procedura rotacji |
 | Prompt injection przez publiczne issue | Agent próbuje niebezpiecznych działań | Etykietę dodaje tylko triage, treść niezaufana, agent bez tokenu GitHub, hooki |
 | Obcy zakładają issue i komentują | Uruchamia się job `decide` | Zużywa tylko darmowe minuty Actions, nie limit Pro |
-| Wyścigi i ręczne edycje komentarza ze stanem | Niespójny stan przebiegu | `concurrency` per issue, weryfikacja autora komentarza, wersja schematu |
+| Wyścigi i ręczne edycje komentarza ze stanem | Niespójny stan przebiegu | `concurrency` per issue na poziomie jobów, dopiero po filtrze autorów; weryfikacja autora komentarza; wersja schematu; etykieta `agent:stop` ważniejsza od zapisanego stanu |
+| Skutek uboczny rozpoczęty przed anulowaniem runu | Po `agent:stop` dokończy się jeszcze operacja w toku, np. rozpoczęty push | Anulowanie runu przez `stop.yml` i sprawdzanie etykiety przed każdym skutkiem ubocznym (rozdz. 3.2); zostaje okno jednej operacji w toku |
 | Zmiany w Claude Code CLI | Inne flagi lub zachowanie hooków | Przypięta wersja, testy hooków w CI |
 | Dziedziczenie tokenu przez polecenia powłoki | Agent może odczytać token | Sprawdzenie w P2, oczyszczone środowisko, blokada `env` i `printenv`, redakcja wyników |
 | Zmiana pipeline'u wymaga nowego tagu w repozytorium demo | Repozytorium demo działa na starej wersji | Tag przy każdym przyroście, aktualizacja tagu jako część PR przyrostu |
@@ -429,3 +440,6 @@ Poniższe założenia pochodzą z wiedzy autora planu, a nie z testów. Każde z
 6. Błąd lub przekroczenie czasu hooka da się zamienić na blokadę (SEC-9.0a), w razie potrzeby przez opakowanie w samym skrypcie hooka (P2).
 7. `actions/create-github-app-token` zawęża uprawnienia tokenu parametrami `permission-*` (P3).
 8. Limity planu Pro mieszczą co najmniej cztery przebiegi testowe w rozsądnym czasie (P8).
+9. Job pominięty warunkiem `if` nie wchodzi do grupy `concurrency` i nie usuwa z niej czekających runów. Jeśli to się nie potwierdzi, filtr autorów działa w osobnym workflow, który uruchamia `orchestrate.yml` zdarzeniem `workflow_dispatch` (P4).
+10. `GITHUB_TOKEN` z uprawnieniem `actions: write` w repozytorium demo anuluje run workflow, który wywołuje reusable workflow z repozytorium pipeline'u (P4).
+11. Anulowany job roli kończy się w ciągu kilku sekund, a proces `claude -p` nie działa dłużej niż job (P4).
