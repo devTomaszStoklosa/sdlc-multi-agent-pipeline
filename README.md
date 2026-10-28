@@ -22,6 +22,29 @@ Specyfikacja pipeline'u, w którym wyspecjalizowani agenci AI przejmują GitHub 
 
 Szkic. Pytania otwarte są w [sekcji 16.2 specyfikacji](spec.md#162-pytania-otwarte).
 
+## Rozwój
+
+Wymagania:
+
+- Node.js 22 (wersja w [.nvmrc](.nvmrc));
+- git 2.31 lub nowszy (wymaga go lefthook);
+- [gitleaks](https://github.com/gitleaks/gitleaks) 8.30.1 w `PATH`, np. `winget install --id Gitleaks.Gitleaks --version 8.30.1`. Bez niego hook `pre-commit` odrzuca każdy commit.
+
+`npm ci` instaluje zależności i hooki gita ([lefthook.yml](lefthook.yml)):
+
+- `pre-commit`: Prettier, ESLint i gitleaks na plikach w stage'u;
+- `commit-msg`: commitlint, czyli Conventional Commits z odwołaniem do issue w nagłówku albo w stopce, np. `feat: add the run store (#3)` albo stopka `Refs #3`.
+
+Te same sprawdzenia uruchamia CI ([ci.yml](.github/workflows/ci.yml)), bo lokalne hooki da się obejść.
+
+Skrypty:
+
+- `npm run typecheck`: TypeScript bez emisji plików;
+- `npm run lint`: ESLint z progami złożoności i rozmiaru;
+- `npm run format` i `npm run format:check`: Prettier (bez plików Markdown);
+- `npm run duplication`: jscpd z progiem 3%;
+- `npm test`: Vitest.
+
 ## Autor
 
 T. Stokłosa

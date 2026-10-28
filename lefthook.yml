@@ -1,0 +1,18 @@
+# Git hooks shared by people and agents (QG-9.13, QG-9.14, QG-9.15).
+# CI runs the same checks again, because local hooks can be skipped (QG-7.12).
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format
+      glob: "*.{ts,js,json,yml,yaml}"
+      run: npx prettier --check {staged_files}
+    - name: lint
+      glob: "*.{ts,js}"
+      run: npx eslint --max-warnings=0 --no-warn-ignored {staged_files}
+    - name: secrets
+      run: gitleaks git --pre-commit --staged --redact --verbose
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npx commitlint --edit {1}
