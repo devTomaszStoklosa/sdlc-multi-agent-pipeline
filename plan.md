@@ -88,6 +88,7 @@ MVP nie może generować żadnych opłat poza istniejącą subskrypcją Claude P
 | Właściciel pipeline'u (OQ-11) | Autor jest właścicielem i operatorem. Do potwierdzenia. | Projekt jednoosobowy. | — |
 | Ponowne uruchomienie po `agent:stop` (FR-4.28b) | Job `decide` odrzuca `agent:ready`, gdy issue lub jego otwarty PR ma `agent:stop`: zdejmuje etykietę i publikuje komentarz. Nowy przebieg z otwartym PR kontynuuje jego branch, a kod joba Developera przed sesją agenta scala do niego aktualny `main` commitem merge; konflikty rozwiązuje Developer w sesji. Bez otwartego PR przebieg tworzy nowy branch i nowy draft PR. | Spec 4.8 po doprecyzowaniu w issue #4. Scalanie wykonuje kod joba, bo agent nie ma dostępu do GitHuba (rozdz. 3.2). | Automatyczne zdejmowanie `agent:stop` przez pipeline (cofa decyzję człowieka, SEC-9.8); ciche ignorowanie `agent:ready` (etykieta zostaje, a późniejsze zdjęcie `agent:stop` niczego nie uruchamia). |
 | Zatrzymanie przebiegu (FR-4.28, SEC-8.9) | Osobny workflow `stop.yml` poza grupą `concurrency`, uruchamiany dodaniem etykiety `agent:stop` do issue lub PR. Anuluje aktywny run przebiegu (identyfikator z komentarza ze stanem) tokenem `GITHUB_TOKEN` z uprawnieniem `actions: write` nadanym tylko temu jobowi. Potem zapisuje stan `stopped`, zdejmuje `agent:ready` i `plan:approved`, kończy check run `agent-review` w toku wynikiem `cancelled` (FR-4.28a) i publikuje podsumowanie tokenem App zawężonym do `issues: write` i `checks: write`. Kod jobów sprawdza etykietę przed każdym skutkiem ubocznym (rozdz. 3.2). | Zatrzymanie nie czeka na koniec joba roli (do 45 minut) i żadne inne zdarzenie nie anuluje go w kolejce. | Obsługa w `orchestrate.yml` w grupie per issue (czeka w kolejce i może zostać z niej usunięta); obsługa w `orchestrate.yml` z grupą zależną od etykiety (`actions: write` dla całego Orchestratora); samo sprawdzanie etykiety bez anulowania runu (agent pracuje dalej i zużywa limit Pro); `actions: write` dla GitHub App (szersze uprawnienia aplikacji i zmiana kroku ręcznego). |
+| Ochrona `main` (FR-6.3) | Dwa rulesety. Ruleset bramek wymaga bramek z rozdz. 3.6 i approvalu code ownera, dopuszcza zmiany `main` tylko przez PR, blokuje force-push i nie ma listy obejść. Ruleset review agenta wymaga check runa `agent-review`, a na liście obejść ma tylko rolę administratora repozytorium, z obejściem możliwym tylko przy merge PR. | Człowiek zmerguje PR spoza pipeline'u albo PR po zatrzymaniu przebiegu bez pomijania bramek i approvalu, bo obejście jednego rulesetu nie zwalnia z reguł drugiego (rozdz. 12). Pipeline nie dotyka PR, których nie utworzył. | Klasyczna branch protection (nie pozwala obejść jednego checku bez obejścia pozostałych); check `agent-review` z wynikiem `neutral` publikowany przez pipeline dla PR poza przebiegiem (działanie na cudzych PR wbrew FR-4.33 i po zatrzymaniu wbrew FR-4.28, a PR z forków nie mają sekretów do tokenu App); `agent-review` jako check niewymagany (nic nie wymusza review Reviewera na PR agenta); wymóg zależny od autora PR albo brancha źródłowego (rulesety działają tylko na branchu docelowym). |
 
 ---
 
@@ -175,7 +176,7 @@ flowchart LR
 | QG-7.9 Zakres | `gates/scope` z tego repozytorium |
 | QG-9.13, QG-9.14 Hooki gita | lefthook (formatter, linter, gitleaks) i commitlint |
 
-Te same sprawdzenia działają w CI (QG-7.12). Branch protection na `main` wymaga wszystkich bramek, check runa `agent-review` i approvalu code ownera, bez wyjątków dla tożsamości pipeline'u (FR-6.3).
+Te same sprawdzenia działają w CI (QG-7.12). Ochronę `main` tworzą dwa rulesety (rozdz. 2.2, FR-6.3). Ruleset bramek wymaga wszystkich bramek i approvalu code ownera i nie ma listy obejść. Ruleset review agenta wymaga check runa `agent-review`, który przy merge PR może obejść tylko administrator repozytorium. Tożsamości pipeline'u nie ma na żadnej liście obejść.
 
 ---
 
@@ -227,7 +228,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 - **Zakres:** repozytorium `sdlc-pipeline-sandbox` z pustym commitem początkowym i całą zawartością wprowadzoną przez PR: aplikacja TypeScript z testami, workflow bramek (rozdz. 3.6), hooki gita, CODEOWNERS, branch protection, etykiety ze spec 10, środowisko `agents`, ustawienia Actions z rozdz. 4. GitHub App zainstalowana w repozytorium demo.
 - **Wymagania:** QG-7.1 do QG-7.8, QG-7.12, FR-6.3, FR-6.6, SEC-8.1, SEC-8.2.
-- **Gotowe, gdy:** ręczny PR człowieka przechodzi wszystkie bramki, push na `main` jest odrzucany, a workflow bez środowiska `agents` nie ma dostępu do tokenu.
+- **Gotowe, gdy:** ręczny PR człowieka przechodzi wszystkie bramki, PR bez `agent-review` da się zmergować tylko obejściem przez administratora, obejście nie pomija bramek ani approvalu code ownera, push na `main` jest odrzucany, a workflow bez środowiska `agents` nie ma dostępu do tokenu.
 - **Zależy od:** P0 (narzędzia i konwencje); utworzenie repozytorium wymaga zgody autora.
 
 ### P4. Orchestrator i magazyn stanu
@@ -312,7 +313,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | FR-5.8 | Częściowo | P5 do P7, F4 | Prompty wersjonowane od MVP; bramka ewaluacji w F4. |
 | FR-6.1, FR-10.3 | MVP | P5 | |
 | FR-6.2, FR-6.4 | MVP | P7 | |
-| FR-6.3 | MVP | P3 | |
+| FR-6.3 | MVP | P3 | Dwa rulesety; `agent-review` obchodzi przy merge PR tylko administrator repozytorium (rozdz. 2.2). |
 | FR-6.5 | MVP | P2, P3 | Brak tokenu w sesji, hook SEC-9.8, App bez wyjątku od branch protection. |
 | FR-6.6 | MVP | P3 | Repozytorium demo nie ma środowisk staging ani produkcja. Wymóg recenzentów wraca przy pierwszym takim środowisku. |
 | FR-6.7 | MVP | P4 | Pipeline nie ma ścieżki, w której agent przyznaje wyjątek. |
@@ -400,6 +401,7 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Zmiany w Claude Code CLI | Inne flagi lub zachowanie hooków | Przypięta wersja, testy hooków w CI |
 | Dziedziczenie tokenu przez polecenia powłoki | Agent może odczytać token | Sprawdzenie w P2, oczyszczone środowisko, blokada `env` i `printenv`, redakcja wyników |
 | Zmiana pipeline'u wymaga nowego tagu w repozytorium demo | Repozytorium demo działa na starej wersji | Tag przy każdym przyroście, aktualizacja tagu jako część PR przyrostu |
+| Obejście `agent-review` na PR agenta w trakcie przebiegu | Człowiek merguje PR bez approve Reviewera | Obejście ma tylko administrator; bramki i approval code ownera nadal obowiązują; merge zarządzanego PR kończy przebieg (spec 9.4) |
 
 ---
 
@@ -443,3 +445,4 @@ Poniższe założenia pochodzą z wiedzy autora planu, a nie z testów. Każde z
 9. Job pominięty warunkiem `if` nie wchodzi do grupy `concurrency` i nie usuwa z niej czekających runów. Jeśli to się nie potwierdzi, filtr autorów działa w osobnym workflow, który uruchamia `orchestrate.yml` zdarzeniem `workflow_dispatch` (P4).
 10. `GITHUB_TOKEN` z uprawnieniem `actions: write` w repozytorium demo anuluje run workflow, który wywołuje reusable workflow z repozytorium pipeline'u (P4).
 11. Anulowany job roli kończy się w ciągu kilku sekund, a proces `claude -p` nie działa dłużej niż job (P4).
+12. Obejście rulesetu review agenta nie zwalnia z reguł rulesetu bramek. Rolę administratora repozytorium da się dodać do listy obejść w repozytorium konta osobistego, a ta rola nie obejmuje GitHub App pipeline'u (P3).
