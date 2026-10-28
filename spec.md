@@ -240,10 +240,10 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 
 ### 4.8 Kontrola przebiegu
 
-- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1), czyli w czasie z NFR-4.28d. Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze (FR-4.28c), a pipeline publikuje krótkie podsumowanie. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
+- **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1), czyli w czasie z NFR-4.28d. Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze (FR-4.28c), a pipeline publikuje podsumowanie (FR-4.28f). Podsumowanie jest jedynym komentarzem zatrzymanego przebiegu. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
 - **FR-4.28a** Przy zatrzymaniu pipeline MUSI:
   - zdjąć z issue etykiety `agent:ready` i `plan:approved`, żeby ponowne dodanie `agent:ready` wysłało zdarzenie GitHuba, a akceptacja planu nie przeszła na kolejny przebieg;
-  - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled`. Merge wymaga wtedy obejścia `agent-review` przez człowieka (FR-6.3);
+  - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled` i linkiem do podsumowania (FR-4.28f). Merge wymaga wtedy obejścia `agent-review` przez człowieka (FR-6.3);
   - porzucić zaplanowane działania przebiegu: obsługę komentarzy po opóźnieniu (FR-4.22) i ponowienia etapu (FR-4.30);
   - zwolnić blokadę współdzielonego środowiska dev, jeśli przebieg ją trzyma (OQ-2).
 
@@ -256,10 +256,22 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - Jeśli issue nie ma otwartego PR, bo człowiek zamknął PR albo usunął jego branch, nowy przebieg zaczyna od zera: tworzy nowy branch z aktualnego głównego brancha (FR-4.7) i nowy draft PR, który linkuje poprzedni. Nazwa nowego brancha MUSI różnić się od nazw istniejących branchy. Zamknięcie PR jest więc sposobem na rozpoczęcie pracy od zera.
 - **FR-4.28c** Przed każdym skutkiem ubocznym przebiegu pipeline MUSI sprawdzić, czy przebieg jest nadal aktywny. Skutki uboczne to commit, push, komentarz, zmiana issue lub PR (w tym etykiet i próśb o review), check run, utworzenie issue i wdrożenie na dev. Przebieg jest aktywny, gdy ani issue, ani jego PR nie ma `agent:stop`, a magazyn stanu wskazuje ten przebieg jako aktywny przebieg issue. Jeśli któryś warunek nie jest spełniony, działanie NIE MOŻE się odbyć.
   - Sprawdzenie odczytuje etykiety w chwili działania, a nie ze zdarzenia. Sama etykieta nie wystarcza, bo jej zdjęcie nie wznawia zatrzymanego przebiegu (FR-4.28). Sam stan też nie wystarcza, bo jego zapis może się spóźnić albo nie nastąpić, gdy zdarzenie `agent:stop` nie dotrze (FR-4.28e).
-  - Reguła obejmuje kod Orchestratora i wywołania narzędzi agentów (SEC-9.8a). Nie obejmuje działań samego zatrzymania: porządków z FR-4.28a i podsumowania.
+  - Reguła obejmuje kod Orchestratora i wywołania narzędzi agentów (SEC-9.8a). Nie obejmuje działań samego zatrzymania: porządków z FR-4.28a i podsumowania (FR-4.28f).
   - Samo kończenie sesji agentów nie wystarcza, bo anulowany proces dostaje kilka sekund przed zabiciem. Operacja, która przeszła sprawdzenie przed dodaniem etykiety, MOŻE się dokończyć, ale musi się zmieścić w czasie z NFR-4.28d.
-- **NFR-4.28d** Zatrzymanie MUSI się zakończyć w ciągu 60 sekund od dodania etykiety `agent:stop` w 95% zatrzymań i w ciągu 5 minut w każdym zatrzymaniu. Zatrzymanie jest zakończone, gdy wszystkie sesje agentów przebiegu się zakończyły i nie trwa żaden jego skutek uboczny (FR-4.28c). Działań samego zatrzymania (FR-4.28a i podsumowania) się nie wlicza. Czas liczy się od znacznika czasu dodania etykiety w GitHubie do ostatniego z tych zdarzeń w logu audytowym (NFR-11.1, NFR-11.3).
+- **NFR-4.28d** Zatrzymanie MUSI się zakończyć w ciągu 60 sekund od dodania etykiety `agent:stop` w 95% zatrzymań i w ciągu 5 minut w każdym zatrzymaniu. Zatrzymanie jest zakończone, gdy wszystkie sesje agentów przebiegu się zakończyły i nie trwa żaden jego skutek uboczny (FR-4.28c). Działań samego zatrzymania (FR-4.28a i FR-4.28f) się nie wlicza. Czas liczy się od znacznika czasu dodania etykiety w GitHubie do ostatniego z tych zdarzeń w logu audytowym (NFR-11.1, NFR-11.3).
 - **FR-4.28e** Pipeline NIE MOŻE polegać wyłącznie na dostarczeniu zdarzenia `agent:stop`. Zdarzenie może nie dotrzeć, np. gdy nie uda się dostawa webhooka, a GitHub nie ponawia nieudanych dostaw sam. Co najwyżej co 2 minuty pipeline MUSI porównać każdy przebieg w stanie aktywnym z etykietami jego issue i PR i zatrzymać (FR-4.28, FR-4.28a) przebieg, którego issue lub PR ma `agent:stop`. Zatrzymanie wykryte w ten sposób liczy się jako utracone zdarzenie w M-G04.
+- **FR-4.28f** Po zatrzymaniu Orchestrator MUSI opublikować podsumowanie jako jeden komentarz w issue. Podsumowanie zawiera:
+  - identyfikator przebiegu;
+  - kto zatrzymał przebieg i gdzie: autora etykiety `agent:stop` oraz to, czy dodał ją do issue, czy do PR;
+  - znacznik czasu dodania etykiety;
+  - stan i etap w chwili zatrzymania oraz numer rundy review, gdy ma to znaczenie;
+  - branch, PR i SHA ostatniego wypchniętego commita, jeśli istnieją;
+  - otwarte znaleziska blokujące i nieblokujące;
+  - przerwane działania: zakończone sesje agentów, porzucone zaplanowane działania (FR-4.28a), operację dokończoną po zatrzymaniu (FR-4.28c), check run `agent-review` zakończony z wynikiem `cancelled` i przerwane wdrożenie na dev;
+  - zużyty koszt i czas przebiegu wobec limitów (NFR-11.4, NFR-11.5);
+  - sposób rozpoczęcia nowego przebiegu (FR-4.28b) i informację, że merge wymaga obejścia `agent-review` (FR-6.3).
+
+  Orchestrator składa podsumowanie z magazynu stanu i logu zdarzeń, bez wywołania modelu, żeby zatrzymanie nie zależało od dostępności ani kosztu modelu. Każdy zatrzymany przebieg ma dokładnie jedno podsumowanie, także gdy `agent:stop` dodano do issue i do PR albo gdy zatrzymanie wykryło też porównanie z FR-4.28e. W PR pipeline nie publikuje osobnego komentarza: PR linkuje issue (FR-4.8), a wynik check runa `agent-review` linkuje podsumowanie (FR-4.28a). Błąd publikacji nie cofa zatrzymania i jest zapisywany w logu zdarzeń (NFR-11.3).
 - **FR-4.29** Etapy MUSZĄ być idempotentne i wznawialne. Stan przebiegu jest przechowywany poza sesjami agentów, żeby etap, który się wywrócił, mógł zostać wznowiony bez powtarzania skutków ubocznych.
 - **FR-4.30** Etap, który zawiedzie z przyczyn infrastrukturalnych, MUSI być ponawiany do skonfigurowanego budżetu (domyślnie 2, ustawiane przez `limits.stage_retries`). Potem przebieg przechodzi do `needs-human`.
 - **FR-4.31** Gdy przebieg osiągnie limit kosztu lub czasu (NFR-11.5), MUSI przejść do `needs-human`.
