@@ -51,6 +51,7 @@ Pipeline wyspecjalizowanych agentów AI (Orchestrator, Planner, Developer, Revie
 - **Plan:** opis zmiany przygotowany przez Plannera, razem z listą plików, które mają się zmienić.
 - **Zmiana high-impact:** zmiana, której plan wymaga akceptacji człowieka, zanim powstanie jakikolwiek kod (sekcja 6.1).
 - **Wyjątek (waiver):** decyzja człowieka o zaakceptowaniu niezaliczonej bramki, zapisana w PR.
+- **Obejście (bypass):** merge PR bez zaliczonego checku `agent-review`, wykonany przez człowieka z listy obejść (FR-6.3). Nie jest wyjątkiem, bo nie dotyczy bramek z sekcji 7.
 - **Eskalacja:** przebieg przechodzi w stan `needs-human`, a agenci przestają nad nim pracować, dopóki człowiek nie zadziała.
 
 ### 1.6 Słowa kluczowe wymagań i identyfikatory
@@ -242,7 +243,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 - **FR-4.28** Dodanie `agent:stop` do issue lub PR MUSI natychmiast zatrzymać przebieg w dowolnym stanie aktywnym (sekcja 4.1). Działające sesje agentów są kończone, nie następują żadne kolejne pushe ani komentarze, a pipeline publikuje krótkie podsumowanie. Zatrzymany przebieg pozostaje zatrzymany: nie wznawia go zdjęcie etykiety `agent:stop` lub `needs-human` ani zamknięcie lub merge PR. Gdy człowiek zmerguje lub zamknie PR po zatrzymaniu, pipeline tylko zapisuje to zdarzenie w logu z identyfikatorem przebiegu (NFR-11.3). Ponowne uruchomienie opisuje FR-4.28b.
 - **FR-4.28a** Przy zatrzymaniu pipeline MUSI:
   - zdjąć z issue etykiety `agent:ready` i `plan:approved`, żeby ponowne dodanie `agent:ready` wysłało zdarzenie GitHuba, a akceptacja planu nie przeszła na kolejny przebieg;
-  - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled`. Wymagany check nadal blokuje merge (FR-6.3);
+  - zakończyć check run `agent-review`, który jest w toku, z wynikiem `cancelled`. Merge wymaga wtedy obejścia `agent-review` przez człowieka (FR-6.3);
   - porzucić zaplanowane działania przebiegu: obsługę komentarzy po opóźnieniu (FR-4.22) i ponowienia etapu (FR-4.30);
   - zwolnić blokadę współdzielonego środowiska dev, jeśli przebieg ją trzyma (OQ-2).
 
@@ -312,7 +313,7 @@ Wymagania:
   - co najmniej jednego approval od człowieka będącego właścicielem kodu (code owner);
   - braku bezpośrednich pushów i braku force-pushów.
 
-  Tożsamość pipeline'u NIE MOŻE być na liście wyjątków od branch protection.
+  Wymóg `agent-review` MOŻE obejść przy merge PR wyłącznie człowiek z listy obejść, np. przy PR spoza pipeline'u albo PR po zatrzymaniu przebiegu (FR-4.28). Obejście NIE MOŻE zwalniać z bramek z sekcji 7, approvalu code ownera ani zakazu bezpośrednich pushów i force-pushów. Tożsamość pipeline'u NIE MOŻE być na liście obejść ani w inny sposób omijać branch protection.
 - **FR-6.4** Prośba o finalną akceptację człowieka MUSI zawsze być ostatnim krokiem przed merge.
 - **FR-6.5** Merge może wykonać tylko człowiek. Agenci NIE MOGĄ mergować i NIE MOGĄ włączać auto-merge.
 - **FR-6.6** Agenci NIE MOGĄ mieć poświadczeń ani uprawnień do stagingu i produkcji. Środowiska GitHub dla stagingu i produkcji MUSZĄ wymagać recenzentów będących ludźmi.
