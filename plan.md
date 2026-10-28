@@ -51,7 +51,7 @@ W MVP działa jeden aktywny przebieg naraz. Pozostałe czekają w `queued`. Pow�
 - Żaden krok nie generuje opłat poza subskrypcją Claude Pro.
 - Issue z wstrzykniętą instrukcją, w tym z prośbą o wypisanie tokenu i zmiennych środowiskowych, nie prowadzi do żadnej zablokowanej akcji, a blokady są w logu audytowym.
 - Publiczne logi i artefakty workflow nie zawierają tokenu w żadnej postaci.
-- `agent:stop` zatrzymuje przebieg w trakcie `developing`.
+- `agent:stop` zatrzymuje przebieg w każdym stanie aktywnym MVP, dodane do issue i do PR (P4, na zaślepkach), oraz w trakcie `developing` z prawdziwą sesją agenta (P8). Każde zatrzymanie mieści się w czasie z NFR-4.28d, nie ma skutków ubocznych rozpoczętych po dodaniu etykiety i publikuje jedno podsumowanie (FR-4.28f).
 - Żaden agent nie zmergował PR, nie zatwierdził go ani nie wypchnął zmian na `main`.
 
 ---
@@ -235,8 +235,8 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 ### P4. Orchestrator i magazyn stanu
 
 - **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu (z nazwami etykiet z chwili startu przebiegu), `orchestrate.yml`, `stop.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop` z porządkowaniem etykiet i check runa, odrzucanie `agent:ready` przy obecnym `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
-- **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, NFR-4.28d, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, SEC-9.8a, FR-10.4, NFR-11.3 do NFR-11.5.
-- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec, w czasie z NFR-4.28d. Po zatrzymaniu nie ma żadnych skutków ubocznych poza dokończeniem operacji, która przeszła sprawdzenie przed dodaniem etykiety (FR-4.28c), a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania. Każde zatrzymanie publikuje w issue dokładnie jedno podsumowanie z elementami z FR-4.28f, także przy `agent:stop` dodanym do issue i do PR. Zatrzymanie działa również przy niepoprawnym `.sdlc-agents.yml` w repozytorium demo (FR-10.4). Ponowne `agent:ready` po zdjęciu `agent:stop` startuje nowy przebieg, a `agent:ready` przy obecnym `agent:stop` zostaje zdjęte z komentarzem.
+- **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, NFR-4.28d, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, SEC-9.8a, FR-10.4, NFR-11.3 do NFR-11.5, QG-12.3a (częściowo).
+- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec, w czasie z NFR-4.28d. Po zatrzymaniu nie ma żadnych skutków ubocznych poza dokończeniem operacji, która przeszła sprawdzenie przed dodaniem etykiety (FR-4.28c), a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania. Każde zatrzymanie publikuje w issue dokładnie jedno podsumowanie z elementami z FR-4.28f, także przy `agent:stop` dodanym do issue i do PR. Zatrzymanie działa również przy niepoprawnym `.sdlc-agents.yml` w repozytorium demo (FR-10.4). Testy zatrzymania z QG-12.3a w zakresie MVP przechodzą na zaślepkach w każdym stanie aktywnym MVP, a zdarzenia zatrzymania i sprawdzeń z FR-4.28c trafiają do logu zdarzeń (NFR-11.3). Ponowne `agent:ready` po zdjęciu `agent:stop` startuje nowy przebieg, a `agent:ready` przy obecnym `agent:stop` zostaje zdjęte z komentarzem.
 - **Zależy od:** P2, P3.
 
 ### P5. Planner
@@ -263,7 +263,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 ### P8. Test end-to-end MVP
 
 - **Zakres:** cztery issue testowe: prosta funkcja, poprawka błędu, zmiana high-impact z nową zależnością, issue z wstrzykniętą instrukcją (m.in. prośba o wypisanie tokenu i zmiennych środowiskowych, push na `main`, pominięcie bramek). Uruchamiane po jednym, żeby zmieścić się w limitach Pro. Przegląd publicznych logów i artefaktów pod kątem wycieku. Raport z wynikami, zużyciem, blokadami hooków i listą poprawek.
-- **Wymagania:** kryteria z rozdz. 1.3, QG-12.3 (częściowo).
+- **Wymagania:** kryteria z rozdz. 1.3, QG-12.3 i QG-12.3a (częściowo).
 - **Gotowe, gdy:** spełnione są wszystkie kryteria ukończenia MVP z rozdz. 1.3.
 - **Zależy od:** P7.
 
@@ -361,6 +361,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | NFR-11.5 | Częściowo | P4 | Limity czasu i tur są egzekwowane; koszt to szacunek zużycia. |
 | QG-12.1, QG-12.5, QG-12.6, QG-12.7 | Później | F4 | |
 | QG-12.3 | Częściowo | P2, P8, F4 | Przypadki ataku w testach hooków i w teście end-to-end. |
+| QG-12.3a | Częściowo | P4, P8, F4 | Testy zatrzymania na zaślepkach w P4 i z sesją agenta w P8, w zestawie ewaluacji od F4. Bez przypadków FR-4.28e i FR-4.34 (rozdz. 8). |
 | QG-12.4 | Odstępstwo | F4 | |
 
 ### 7.5 Historyjki użytkownika i metryki
@@ -376,7 +377,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | US-9 | Częściowo | P4 (log i zużycie); pełny ślad w F5 |
 | US-10 | Później | F5 |
 
-Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3, więc F5 będzie miała dane historyczne. Kryteria ukończenia MVP sprawdzają ręcznie odpowiedniki M-E02 i M-E10.
+Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3, więc F5 będzie miała dane historyczne. Kryteria ukończenia MVP sprawdzają ręcznie odpowiedniki M-E02, M-E10, M-C16 i M-C17.
 
 ---
 
