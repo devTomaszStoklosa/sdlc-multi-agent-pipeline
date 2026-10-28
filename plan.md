@@ -185,8 +185,8 @@ W repozytorium publicznym każdy może założyć issue i dodać komentarz, a lo
 
 | Środek | Opis | Wymagania | Wprowadza | Sprawdza |
 |---|---|---|---|---|
-| Token tylko w jobach ról | `CLAUDE_CODE_OAUTH_TOKEN` jest sekretem środowiska GitHub `agents` z polityką „tylko branch `main`”. Odwołują się do niego wyłącznie joby ról. Job `decide` i workflow bramek go nie widzą. | SEC-8.2 | P3, P4 | P3: workflow bez środowiska `agents` nie ma tokenu |
-| Bramka przed modelem | Job roli startuje tylko wtedy, gdy `decide` potwierdzi, że etykietę dodał użytkownik z co najmniej triage, a komentarz napisał użytkownik z prawem zapisu, który nie jest botem. Issue i komentarze od obcych uruchamiają tylko `decide`, który kończy się bez wywołania modelu. | FR-4.1, FR-4.23, SEC-8.6, SEC-8.7 | P4 | Testy jednostkowe dla każdego typu autora |
+| Token tylko w jobach ról | `CLAUDE_CODE_OAUTH_TOKEN` jest sekretem środowiska GitHub `agents` z polityką „tylko branch `main`”. Odwołują się do niego wyłącznie joby ról. Joby `filter` i `decide`, workflow `stop.yml` i workflow bramek go nie widzą. | SEC-8.2 | P3, P4 | P3: workflow bez środowiska `agents` nie ma tokenu |
+| Bramka przed modelem | Job roli startuje tylko wtedy, gdy `decide` potwierdzi, że etykietę dodał użytkownik z co najmniej triage, a komentarz napisał użytkownik z prawem zapisu, który nie jest botem. Komentarze od obcych odpadają już w jobie `filter`. Komentarze współpracowników bez wymaganych uprawnień odrzuca `decide`. Oba joby kończą się bez wywołania modelu. | FR-4.1, FR-4.23, SEC-8.6, SEC-8.7 | P4 | Testy jednostkowe dla każdego typu autora |
 | Zatrzymanie poza kolejką | Zdarzenia od obcych odpadają w jobie `filter`, zanim trafią do grupy `concurrency`, więc nie opóźniają zdarzeń przebiegu ani nie usuwają ich z kolejki. `agent:stop` obsługuje osobny workflow poza grupą (rozdz. 2.2, 3.5). | FR-4.28, SEC-8.6, SEC-8.9 | P4 | Testy joba `filter`; zatrzymanie w trakcie joba roli z równoległymi komentarzami obcych w P4 |
 | Brak zdarzeń z forków | Zakaz `pull_request_target` w obu repozytoriach. `workflow_run` jest obsługiwany tylko wtedy, gdy branch pochodzi z repozytorium demo i należy do aktywnego przebiegu. Bramki działają na `pull_request`, które nie dostaje sekretów dla forków. | FR-4.33 | P3, P4 | Testy `decide`; przegląd workflow w P3 |
 | Ustawienia Actions | Zgoda na uruchomienie workflow dla wszystkich zewnętrznych współtwórców; domyślne uprawnienia `GITHUB_TOKEN` tylko do odczytu. | SEC-8.1 | P3 | Przegląd ustawień w P3 |
@@ -394,7 +394,7 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Opus niedostępny w planie Pro | Reviewer na Haiku, słabsze review (M-D03) | Bramki deterministyczne i finalne review człowieka |
 | Wyciek tokenu przez publiczne logi lub artefakty w postaci, której GitHub nie zamaskuje | Ktoś zużywa limity autora | Środki z rozdz. 4, przegląd logów w P8, procedura rotacji |
 | Prompt injection przez publiczne issue | Agent próbuje niebezpiecznych działań | Etykietę dodaje tylko triage, treść niezaufana, agent bez tokenu GitHub, hooki |
-| Obcy zakładają issue i komentują | Uruchamia się job `decide` | Zużywa tylko darmowe minuty Actions, nie limit Pro |
+| Obcy zakładają issue i komentują | Uruchamia się job `filter` | Zużywa tylko darmowe minuty Actions, nie limit Pro |
 | Wyścigi i ręczne edycje komentarza ze stanem | Niespójny stan przebiegu | `concurrency` per issue na poziomie jobów, dopiero po filtrze autorów; weryfikacja autora komentarza; wersja schematu; etykieta `agent:stop` ważniejsza od zapisanego stanu |
 | Skutek uboczny rozpoczęty przed anulowaniem runu | Po `agent:stop` dokończy się jeszcze operacja w toku, np. rozpoczęty push | Anulowanie runu przez `stop.yml` i sprawdzanie etykiety przed każdym skutkiem ubocznym (rozdz. 3.2); zostaje okno jednej operacji w toku |
 | Zmiany w Claude Code CLI | Inne flagi lub zachowanie hooków | Przypięta wersja, testy hooków w CI |
