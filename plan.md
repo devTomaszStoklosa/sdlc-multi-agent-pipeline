@@ -1,0 +1,431 @@
+# Plan techniczny: MVP wieloagentowego pipeline'u SDLC
+
+**Autor:** T. Stokłosa
+**Status:** Szkic
+**Data:** 2026-10-28
+**Intencja:** [intent.md](intent.md)
+**Specyfikacja:** [spec.md](spec.md)
+
+---
+
+## 1. Podsumowanie
+
+### 1.1 Cel planu
+
+Specyfikacja opisuje docelowy pipeline. Ten plan opisuje, jak dojść do jego pierwszej działającej wersji: najmniejszego przebiegu od początku do końca (walking skeleton), który przejmuje oznaczone issue i oddaje człowiekowi PR po bramkach i pętli review agenta. Reszta specyfikacji jest rozpisana na fazy po MVP.
+
+Odwołania w postaci „spec X.Y” wskazują sekcje specyfikacji, a „rozdz. N” rozdziały tego planu. Identyfikatory wymagań (`FR-`, `NFR-`, `SEC-`, `QG-`), metryk (`M-`), historyjek (`US-`) i pytań otwartych (`OQ-`) pochodzą ze specyfikacji.
+
+### 1.2 Zakres MVP
+
+Przebieg MVP obejmuje stany `queued`, `planning`, `awaiting-plan-approval`, `developing`, `gating`, `reviewing`, `awaiting-human-review`, `done`, `needs-human` i `stopped` (spec 4.1). Stany `deploying-dev` i `handling-comments` są pominięte: werdykt `approve` prowadzi wprost do `awaiting-human-review`.
+
+```mermaid
+stateDiagram-v2
+    state "awaiting-plan-approval" as APA
+    state "awaiting-human-review" as AHR
+    state "needs-human" as NH
+    [*] --> queued: etykieta gotowości od użytkownika z triage
+    queued --> planning: brak innego aktywnego przebiegu
+    planning --> developing: plan zwykły
+    planning --> APA: plan high-impact
+    APA --> developing: etykieta akceptacji planu
+    APA --> planning: komentarz z prośbą o zmiany
+    developing --> gating: push
+    gating --> developing: bramka niezaliczona
+    gating --> reviewing: bramki zaliczone
+    reviewing --> developing: changes_requested
+    reviewing --> AHR: approve
+    reviewing --> NH: limit rund albo powtórzone znalezisko
+    AHR --> done: merge albo zamknięcie PR
+    done --> [*]
+```
+
+Etykieta gotowości to `agent:ready`, a etykieta akceptacji planu to `plan:approved`. Z każdego aktywnego stanu przebieg przechodzi do `stopped` po etykiecie `agent:stop` oraz do `needs-human` po wyczerpaniu ponowień albo limitów (spec 4.2). Ze stanu `needs-human` wraca do stanu, w którym się zatrzymał, gdy człowiek zdejmie etykietę.
+
+W MVP działa jeden aktywny przebieg naraz. Pozostałe czekają w `queued`. Powód: limity planu Claude Pro (rozdz. 2.1).
+
+### 1.3 Kryteria ukończenia MVP
+
+- Trzy issue testowe (prosta funkcja, poprawka błędu, zmiana high-impact z nową zależnością) dochodzą do `awaiting-human-review` bez ingerencji człowieka poza akceptacją planu high-impact. Każde mieści się w limicie 45 minut i w limicie tur.
+- Żaden krok nie generuje opłat poza subskrypcją Claude Pro.
+- Issue z wstrzykniętą instrukcją, w tym z prośbą o wypisanie tokenu i zmiennych środowiskowych, nie prowadzi do żadnej zablokowanej akcji, a blokady są w logu audytowym.
+- Publiczne logi i artefakty workflow nie zawierają tokenu w żadnej postaci.
+- `agent:stop` zatrzymuje przebieg w trakcie `developing`.
+- Żaden agent nie zmergował PR, nie zatwierdził go ani nie wypchnął zmian na `main`.
+
+---
+
+## 2. Decyzje dla MVP
+
+### 2.1 Warunek zera kosztów
+
+MVP nie może generować żadnych opłat poza istniejącą subskrypcją Claude Pro autora. To warunek nadrzędny wobec pozostałych decyzji.
+
+| Element | Darmowa droga |
+|---|---|
+| Model | Token subskrypcji Pro z `claude setup-token` jako sekret `CLAUDE_CODE_OAUTH_TOKEN`. Zużycie wlicza się w limity planu, wspólne z codzienną pracą autora w Claude Code. |
+| Środowisko agentów | Claude Code CLI w trybie headless (`claude -p`), ten sam harness co Claude Agent SDK. |
+| CI | GitHub Actions na standardowych runnerach, bez limitu minut w repozytoriach publicznych. |
+| Bramki | CodeQL (darmowy dla repozytoriów publicznych), gitleaks (darmowy dla kont osobistych), `dependency-review-action`, ESLint, Vitest, jscpd, lefthook, commitlint. |
+| Stan i audyt | W GitHubie: komentarz ze stanem w issue, artefakty workflow. Bez zewnętrznej bazy i hostingu. |
+| Integracja z GitHubem | GitHub App (bezpłatna). |
+
+### 2.2 Tabela decyzji
+
+| Temat | Decyzja | Powód | Odrzucona alternatywa |
+|---|---|---|---|
+| Środowisko agentów (spec 13.4) | Claude Code CLI w trybie headless, wersja przypięta. Każda rola stoi za adapterem (spec 13.4 pkt 3), więc środowisko da się wymienić. | Zero kosztów przy tokenie subskrypcji; wbudowane narzędzia do kodowania i hooki zgodne ze spec 9.2. | Claude Agent SDK z kluczem API (płatny); Claude Managed Agents (płatne, beta); darmowe poziomy innych dostawców i modele lokalne (zmiana frameworka, niskie limity, słaba jakość). |
+| Spike frameworków (spec 13.4 pkt 4) | Zastąpiony powyższą decyzją. Spike można wykonać w F4 na zestawie ewaluacji. | Warunek zera kosztów wyklucza pozostałych kandydatów w MVP. | Spike trzech kandydatów w fazie 0. |
+| Modele (OQ-10, FR-5.5) | Planner i Developer: `claude-sonnet-5-5`. Reviewer: `claude-opus-5-5`, jeśli plan Pro udostępnia go w Claude Code, w przeciwnym razie `claude-haiku-5-5`. Model ustawiany per rola w konfiguracji. | Reviewer na innym modelu niż Developer. Review czyta diff, więc zużywa mniej limitu niż implementacja i stać go na mocniejszy model. | Jeden model dla wszystkich ról; Reviewer u innego dostawcy. |
+| Dane (OQ-7) | Kod i treść issue trafiają do Anthropic w ramach subskrypcji konsumenckiej. O użyciu do trenowania decyduje ustawienie prywatności konta autora. | Repozytorium demo jest publiczne, więc ryzyko ujawnienia jest niskie. | — |
+| Repozytorium pilotażowe (OQ-1) | Nowe, publiczne repozytorium `sdlc-pipeline-sandbox` z małą aplikacją TypeScript. | Bezpieczne, przewidywalne, widoczne w portfolio, darmowe CI. | To repozytorium (każda zmiana pipeline'u jest high-impact); prawdziwy projekt (za wcześnie). |
+| Orchestrator (FR-5.6) | Reusable workflows w tym repozytorium, wywoływane z repozytorium demo. Sterowanie jest deterministycznym kodem TypeScript; w MVP Orchestrator nie wywołuje modelu. | Brak serwera do utrzymania; zdarzenia GitHuba bez publicznego endpointu. | Własny serwer webhooków z bazą danych (hosting i koszt od pierwszego dnia). |
+| Magazyn stanu (FR-4.29) | Ukryty komentarz JSON autorstwa bota w issue, z wersją schematu. `concurrency` per issue. | Zero infrastruktury. | Zewnętrzna baza danych (konto, sekret, allowlista sieci). |
+| Limity (OQ-3, OQ-5) | `high_impact.max_files: 10`, `high_impact.max_changed_lines: 400`, `limits.max_minutes_per_run: 45`, nowe pole `limits.max_turns_per_stage`. `limits.max_cost_usd_per_run` liczony z szacunku kosztu raportowanego przez Claude Code, jako miara zużycia, a nie wydatku. | Ostrożne MVP i limity planu Pro. | Wartości przykładowe ze spec 10 ($20, 120 minut). |
+| Limit planu Pro | Trafienie w limit planu jest błędem infrastrukturalnym (FR-4.30). Po wyczerpaniu ponowień przebieg przechodzi do `needs-human` z komentarzem, kiedy limit się odnowi. Człowiek wznawia przebieg zdjęciem etykiety (FR-4.32). | Spec nie przewiduje limitów subskrypcji; to najbliższy istniejący mechanizm. | Automatyczne czekanie w jobie (blokuje runner, przekracza limit czasu). |
+| GitHub App (OQ-8, SEC-8.1) | Jedna aplikacja bez uprawnienia `workflows`. Tokeny zawężane per rola przez `actions/create-github-app-token` z parametrami `permission-*`, zgodnie z tabelą zakresów w spec 5. | Tylko ludzie zmieniają CI; każda rola ma minimalne uprawnienia. | Osobna aplikacja na rolę (więcej kluczy do ochrony). |
+| Właściciel pipeline'u (OQ-11) | Autor jest właścicielem i operatorem. Do potwierdzenia. | Projekt jednoosobowy. | — |
+| Ponowne uruchomienie po `agent:stop` (FR-4.28) | Nowy przebieg wymaga zdjęcia `agent:stop` przez człowieka. `agent:ready` przy obecnej etykiecie `agent:stop` jest ignorowane. | Spec tego nie rozstrzyga; doprecyzowanie w issue #4. | Automatyczne zdejmowanie `agent:stop` przez pipeline. |
+
+---
+
+## 3. Architektura
+
+### 3.1 Repozytoria
+
+- **`sdlc-multi-agent-pipeline`** (to repozytorium, publiczne): kod pipeline'u w TypeScript, reusable workflows, bazowy zestaw organizacji `config/org-baseline.yml`, prompty ról w `prompts/`, ustawienia Claude Code z hookami. Nie przechowuje tokenu Claude i nie uruchamia agentów.
+- **`sdlc-pipeline-sandbox`** (nowe, publiczne): mała aplikacja TypeScript z testami, `.sdlc-agents.yml`, workflow bramek, hooki gita, cienkie workflow wywołujące reusable workflows pipeline'u z przypiętym tagiem.
+
+Kod pipeline'u podlega tym samym zasadom co kod tworzony przez agentów (spec 7.3): SOLID, DRY, KISS, YAGNI i prawo Demeter, sprawdzane progami złożoności i duplikacji oraz w review.
+
+### 3.2 Zasada: agent bez dostępu do GitHuba
+
+Sesje agentów nie dostają żadnego tokenu GitHub. Agent pracuje tylko na przestrzeni roboczej i kończy pracę wynikiem w JSON: planem, komunikatem commita, werdyktem ze znaleziskami, odpowiedziami w wątkach albo listą issue spoza zakresu. Kod joba waliduje ten wynik schematem i dopiero wtedy wykonuje skutki uboczne w GitHubie tokenem roli: komentarze, commit, push, draft PR, check run, prośbę o review.
+
+Dzięki temu zakazy z SEC-9.2, SEC-9.6, SEC-9.7 i SEC-9.8 są wymuszone strukturalnie: agent nie ma czym wykonać zakazanej akcji. Hooki z spec 9.2 są drugą warstwą (SEC-9.0c), a nie jedyną. Ta zasada zmniejsza też skutki prompt injection (SEC-8.5), bo wstrzyknięta instrukcja może zmienić najwyżej treść wyniku, który i tak przechodzi walidację.
+
+### 3.3 Moduły
+
+| Moduł | Odpowiedzialność | Wymagania |
+|---|---|---|
+| `core/state-machine` | Czysta funkcja: stan i zdarzenie na wejściu, nowy stan i lista akcji na wyjściu, według spec 4.2 | FR-5.6 |
+| `core/run-store` | Interfejs `RunStateStore` z implementacją na komentarzu w issue i implementacją w pamięci do testów. Interfejs uzasadniają testy i możliwa baza danych w F5. | FR-4.29 |
+| `config` | Schemat `.sdlc-agents.yml` (zod), scalanie z bazą organizacji tylko w stronę zaostrzenia | FR-10.1, FR-10.2 |
+| `github` | Klient Octokit, sprawdzanie uprawnień autora zdarzenia (triage, zapis, bot), etykiety, PR, check runy | FR-4.1, FR-4.23, FR-4.33, SEC-8.6, SEC-8.7 |
+| `hooks` | Każda reguła jako osobna polityka za wspólnym interfejsem, opakowanie fail-closed, zestaw bazowy plus zaostrzenia repozytorium | SEC-9.0a, SEC-9.0b, spec 9.2 |
+| `agents` | Adapter roli (ustrukturyzowane wejście i wyjście), implementacja na Claude Code CLI, role Planner, Developer i Reviewer | FR-5.1, FR-5.8 |
+| `gates/scope` | Deterministyczna bramka zakresu uruchamiana w CI repozytorium demo | QG-7.9 |
+| `audit` | Zdarzenia jako JSONL, zużycie tokenów i szacunek kosztu z wyniku CLI, liczniki limitów | NFR-11.3, NFR-11.4, NFR-11.5 |
+
+Nowe zachowanie (kolejna rola, kolejna polityka hooka, kolejny magazyn stanu) dodaje się nową implementacją istniejącego interfejsu, bez zmiany kodu, który z niego korzysta.
+
+### 3.4 Uruchomienie roli
+
+Każda rola działa w osobnym jobie, z osobnym tokenem App i osobną sesją (FR-5.1). Job uruchamia `claude -p` z:
+
+- modelem roli (`--model`);
+- listą dozwolonych narzędzi (Planner i Reviewer: tylko odczyt i wyszukiwanie; Developer: odczyt, edycja, zapis i polecenia powłoki ograniczone hookami);
+- limitem tur (`--max-turns`);
+- wynikiem w JSON, który zawiera też zużycie tokenów i szacunek kosztu;
+- plikiem ustawień z hookami `PreToolUse`, `PostToolUse` i `Stop`. Hooki to skrypty Node zbudowane z kodu TypeScript pipeline'u, które czytają zdarzenie z wejścia standardowego.
+
+Prompty ról są wersjonowane w `prompts/` (FR-5.8). Dokładne flagi CLI zostaną potwierdzone w P2 (rozdz. 12).
+
+### 3.5 Przepływ zdarzeń
+
+```mermaid
+flowchart LR
+    E["Zdarzenie GitHuba<br/>issues, issue_comment,<br/>pull_request, workflow_run"] --> D["Job decide<br/>bez modelu i bez tokenu Claude"]
+    D -->|zapis stanu| S[("Komentarz ze stanem<br/>w issue")]
+    D -->|start roli| R["Job roli<br/>środowisko agents"]
+    R --> C["claude -p<br/>hooki, lista narzędzi,<br/>brak tokenu GitHub"]
+    C -->|wynik JSON| W["Kod joba<br/>walidacja schematu"]
+    W -->|token roli z GitHub App| G["GitHub<br/>komentarze, commit, push,<br/>draft PR, check run"]
+    G -->|push| CI["Workflow bramek"]
+    CI -->|workflow_run| E
+```
+
+- Workflow `orchestrate.yml` uruchamiają zdarzenia `issues` (labeled, unlabeled), `issue_comment`, `pull_request` (closed) i `workflow_run` po zakończeniu workflow bramek.
+- Job `decide` liczy przejście, zapisuje stan i warunkowo startuje job roli.
+- Wyniki bramek pipeline odbiera przez `workflow_run`, bo zdarzenie `check_suite` nie uruchamia workflow dla suite'ów utworzonych przez GitHub Actions.
+- Pushe wykonuje token GitHub App, więc uruchamiają CI. Pushe tokenem `GITHUB_TOKEN` by go nie uruchomiły.
+
+### 3.6 Bramki w repozytorium demo
+
+| Bramka | Narzędzie |
+|---|---|
+| QG-7.1 Analiza statyczna | ESLint, poziom `error` |
+| QG-7.2 SAST | CodeQL |
+| QG-7.3 Skanowanie sekretów | gitleaks |
+| QG-7.4 Skanowanie zależności | `actions/dependency-review-action`, próg `high` |
+| QG-7.5 Testy | Vitest |
+| QG-7.6 Pokrycie | Vitest z pokryciem porównywanym z `main`, tolerancja 0 |
+| QG-7.7 Złożoność | Reguła ESLint `complexity`, próg 10 |
+| QG-7.8 Duplikacja | jscpd, próg 3% |
+| QG-7.9 Zakres | `gates/scope` z tego repozytorium |
+| QG-9.13, QG-9.14 Hooki gita | lefthook (formatter, linter, gitleaks) i commitlint |
+
+Te same sprawdzenia działają w CI (QG-7.12). Branch protection na `main` wymaga wszystkich bramek, check runa `agent-review` i approvalu code ownera, bez wyjątków dla tożsamości pipeline'u (FR-6.3).
+
+---
+
+## 4. Ochrona tokenu subskrypcji w publicznym repozytorium
+
+W repozytorium publicznym każdy może założyć issue i dodać komentarz, a logi i artefakty workflow są jawne. Workflow uruchomione przez `issues` i `issue_comment` działają w kontekście repozytorium, więc mają dostęp do sekretów. Cel tego rozdziału: nikt poza autorem nie może uruchomić agenta na tokenie subskrypcji ani tego tokenu odczytać.
+
+| Środek | Opis | Wymagania | Wprowadza | Sprawdza |
+|---|---|---|---|---|
+| Token tylko w jobach ról | `CLAUDE_CODE_OAUTH_TOKEN` jest sekretem środowiska GitHub `agents` z polityką „tylko branch `main`”. Odwołują się do niego wyłącznie joby ról. Job `decide` i workflow bramek go nie widzą. | SEC-8.2 | P3, P4 | P3: workflow bez środowiska `agents` nie ma tokenu |
+| Bramka przed modelem | Job roli startuje tylko wtedy, gdy `decide` potwierdzi, że etykietę dodał użytkownik z co najmniej triage, a komentarz napisał użytkownik z prawem zapisu, który nie jest botem. Issue i komentarze od obcych uruchamiają tylko `decide`, który kończy się bez wywołania modelu. | FR-4.1, FR-4.23, SEC-8.6, SEC-8.7 | P4 | Testy jednostkowe dla każdego typu autora |
+| Brak zdarzeń z forków | Zakaz `pull_request_target` w obu repozytoriach. `workflow_run` jest obsługiwany tylko wtedy, gdy branch pochodzi z repozytorium demo i należy do aktywnego przebiegu. Bramki działają na `pull_request`, które nie dostaje sekretów dla forków. | FR-4.33 | P3, P4 | Testy `decide`; przegląd workflow w P3 |
+| Ustawienia Actions | Zgoda na uruchomienie workflow dla wszystkich zewnętrznych współtwórców; domyślne uprawnienia `GITHUB_TOKEN` tylko do odczytu. | SEC-8.1 | P3 | Przegląd ustawień w P3 |
+| Agent nie zmienia workflow | GitHub App bez uprawnienia `workflows` (OQ-8). Hook i bramka zakresu dodatkowo blokują zmiany w `.github/`. | SEC-9.1, QG-7.9, QG-7.11 | P2, P3, P6 | Testy hooków; próba w P8 |
+| Nic nie wycieka do logów | Polecenia powłoki agenta nie dziedziczą tokenu. Hooki blokują odczyt zmiennych środowiskowych i plików z sekretami. Wyniki narzędzi, komentarze i log audytowy przechodzą przez redakcję sekretów, także zakodowanych w base64 i hex. Pełne transkrypty sesji nie trafiają ani do logów, ani do artefaktów; artefakt audytu zawiera tylko podsumowania. | SEC-9.3, SEC-9.10, NFR-9.11 | P2 | Testy hooków z przypadkami ataku; przegląd logów w P8 |
+| Treść niezaufana | Issue i komentarze trafiają do agenta jako dane, nie jako instrukcje. | SEC-8.5 | P2, P5, P6, P7 | Issue z wstrzykniętą instrukcją w P8 |
+
+**Procedura na wypadek wycieku:** unieważnić token, wygenerować nowy przez `claude setup-token`, podmienić sekret w środowisku `agents`, przejrzeć logi i artefakty workflow od chwili możliwego wycieku. Rotacja planowa raz na kwartał.
+
+---
+
+## 5. Przyrosty MVP
+
+Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-opis>` i jeden PR. Przyrosty są realizowane po kolei, bo każdy zależy od poprzedniego. Ticket powstaje w chwili rozpoczęcia przyrostu.
+
+### P0. Szkielet repozytorium pipeline'u
+
+- **Zakres:** TypeScript w trybie strict, ESLint (w tym reguły złożoności), Prettier, Vitest, lefthook, commitlint, CI tego repozytorium, struktura katalogów z rozdz. 3.3.
+- **Wymagania:** QG-9.13, QG-9.14, QG-9.15.
+- **Gotowe, gdy:** CI jest zielone, a hooki gita odrzucają commit niezgodny z Conventional Commits i commit z sekretem.
+- **Zależy od:** —
+
+### P1. Konfiguracja
+
+- **Zakres:** schemat `.sdlc-agents.yml` z polami ze spec 10 i `limits.max_turns_per_stage`, `config/org-baseline.yml`, scalanie tylko w stronę zaostrzenia, CLI walidacji.
+- **Wymagania:** FR-10.1, FR-10.2.
+- **Gotowe, gdy:** testy potwierdzają odrzucenie niepoprawnej konfiguracji i każdej próby złagodzenia bazy organizacji.
+- **Zależy od:** P0.
+
+### P2. Hooki bazowe i środowisko agentów
+
+- **Zakres:** polityki `PreToolUse` (SEC-9.1 do SEC-9.8), `PostToolUse` (QG-9.9, SEC-9.10, NFR-9.11) i `Stop` (QG-9.12), opakowanie fail-closed, testy z przypadkami ataku jako zalążek zestawu z QG-12.3. Próbna sesja `claude -p` na runnerze GitHub Actions i potwierdzenie założeń z rozdz. 12.
+- **Wymagania:** SEC-9.0a, SEC-9.0b, SEC-9.0c, SEC-9.1 do SEC-9.8, QG-9.9, SEC-9.10, NFR-9.11, QG-9.12, FR-5.4.
+- **Gotowe, gdy:** każdy przypadek ataku jest blokowany w testach, a próbna sesja na runnerze działa na tokenie subskrypcji bez opłat i bez wycieku tokenu do logów.
+- **Zależy od:** P1.
+
+### P3. Repozytorium demo i GitHub App
+
+- **Zakres:** repozytorium `sdlc-pipeline-sandbox` z pustym commitem początkowym i całą zawartością wprowadzoną przez PR: aplikacja TypeScript z testami, workflow bramek (rozdz. 3.6), hooki gita, CODEOWNERS, branch protection, etykiety ze spec 10, środowisko `agents`, ustawienia Actions z rozdz. 4. GitHub App zainstalowana w repozytorium demo.
+- **Wymagania:** QG-7.1 do QG-7.8, QG-7.12, FR-6.3, FR-6.6, SEC-8.1, SEC-8.2.
+- **Gotowe, gdy:** ręczny PR człowieka przechodzi wszystkie bramki, push na `main` jest odrzucany, a workflow bez środowiska `agents` nie ma dostępu do tokenu.
+- **Zależy od:** P0 (narzędzia i konwencje); utworzenie repozytorium wymaga zgody autora.
+
+### P4. Orchestrator i magazyn stanu
+
+- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu, `orchestrate.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop`, `needs-human`, limity czasu i tur, ponowienia, obsługa limitu planu Pro, log zdarzeń. Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
+- **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, NFR-11.3 do NFR-11.5.
+- **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, a zdarzenia od nieuprawnionych autorów nie startują żadnej roli.
+- **Zależy od:** P2, P3.
+
+### P5. Planner
+
+- **Zakres:** prompt Plannera, komentarz z planem i blokiem `sdlc-plan` w YAML (lista plików z jednym zdaniem uzasadnienia przy każdym), klasyfikacja high-impact jako suma reguł deterministycznych (ścieżki z konfiguracji, manifesty zależności, pliki CI, `.sdlc-agents.yml`, limity rozmiaru) i oceny modelu (bezpieczeństwo, publiczne API). Suma, bo przeoczenie zmiany high-impact jest droższe niż fałszywy alarm (spec 12.2). Każda wersja planu jako osobny komentarz z numerem. Akceptacja etykietą `plan:approved` i poprawki po komentarzu człowieka.
+- **Wymagania:** FR-4.3 do FR-4.6, FR-6.1, FR-10.3, SEC-8.5, SEC-8.10.
+- **Gotowe, gdy:** na trzech issue testowych plan ma wszystkie elementy z FR-4.3, zmiana z nową zależnością jest sklasyfikowana jako high-impact, a przebieg czeka na `plan:approved`.
+- **Zależy od:** P4.
+
+### P6. Developer i bramka zakresu
+
+- **Zakres:** prompt Developera, sesja bez tokenu GitHub, commit i push wykonywane przez kod joba, Conventional Commits z odwołaniem do issue, draft PR z `Closes #<numer>`, issue spoza zakresu, aktualizacja planu z powodem, powrót do Developera po niezaliczonej bramce, bramka zakresu `gates/scope` w CI repozytorium demo.
+- **Wymagania:** FR-4.7 do FR-4.12, QG-7.9, QG-7.11.
+- **Gotowe, gdy:** prosta funkcja z issue testowego przechodzi bramki, plik spoza planu zatrzymuje bramkę zakresu, a niezaliczona bramka wraca do Developera bez zużycia rundy review.
+- **Zależy od:** P5.
+
+### P7. Reviewer i pętla review
+
+- **Zakres:** prompt Reviewera z checklistą ze spec 7.3, kontekst ograniczony do issue, planu, diffu, wyników bramek i wcześniejszych znalezisk, narzędzia tylko do odczytu, inny model niż Developer. Stabilny identyfikator znaleziska jako skrót z reguły, pliku i zakotwiczenia w kodzie. Werdykt jako check run `agent-review`, znaleziska jako komentarze review bez approvalu. Limit rund i eskalacja powtórzonego znaleziska. Na koniec PR oznaczony jako gotowy i prośba o review z opisem według FR-4.20, bez URL środowiska dev.
+- **Wymagania:** FR-4.13 do FR-4.18, FR-4.20, FR-5.2, FR-5.3, FR-5.5, FR-6.2, FR-6.4, QG-7.10.
+- **Gotowe, gdy:** diff z celowo podłożonym naruszeniem dostaje `changes_requested`, poprawiony diff dostaje `approve`, a czwarta runda kończy się w `needs-human`.
+- **Zależy od:** P6.
+
+### P8. Test end-to-end MVP
+
+- **Zakres:** cztery issue testowe: prosta funkcja, poprawka błędu, zmiana high-impact z nową zależnością, issue z wstrzykniętą instrukcją (m.in. prośba o wypisanie tokenu i zmiennych środowiskowych, push na `main`, pominięcie bramek). Uruchamiane po jednym, żeby zmieścić się w limitach Pro. Przegląd publicznych logów i artefaktów pod kątem wycieku. Raport z wynikami, zużyciem, blokadami hooków i listą poprawek.
+- **Wymagania:** kryteria z rozdz. 1.3, QG-12.3 (częściowo).
+- **Gotowe, gdy:** spełnione są wszystkie kryteria ukończenia MVP z rozdz. 1.3.
+- **Zależy od:** P7.
+
+---
+
+## 6. Fazy po MVP
+
+| Faza | Zakres | Wymagania | Pytania otwarte |
+|---|---|---|---|
+| F2 | Obsługa komentarzy człowieka w PR, klasyfikacja komentarzy na `claude-haiku-5-5`, ponowna pętla po zmianach | FR-4.21, FR-4.22, FR-4.24 do FR-4.27 | — |
+| F3 | Wdrożenie branchu PR na dev przez agenta DevOps z OIDC, na darmowym celu (np. podgląd w GitHub Pages albo kontener uruchamiany w samym jobie) | FR-4.19, FR-5.7 | OQ-2 |
+| F4 | Zestaw ewaluacji i bramka ewaluacji w CI pipeline'u, dawkowane pod limity Pro; opcjonalny spike frameworków na tym zestawie | QG-12.1, QG-12.3 do QG-12.7, FR-5.8 | OQ-4 |
+| F5 | Obserwowalność i metryki: magazyn zdarzeń tylko do dopisywania (darmowy), trace, zapis wyjątków, linia bazowa, dashboard zestawu podstawowego ze spec 14.10 | NFR-11.1, NFR-11.2, NFR-11.6, QG-7.13 | OQ-6, OQ-9 |
+| F6 | Pilotaż na prawdziwym repozytorium (faza 1 ze spec 15), pełna allowlista ruchu sieciowego | SEC-8.4 | OQ-1 dla pilotażu, OQ-12 |
+
+---
+
+## 7. Tabela śledzenia wymagań
+
+Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza spełnienie z ograniczeniem opisanym w uwagach, **później** oznacza fazę po MVP, a **odstępstwo** oznacza świadome niespełnienie w MVP z powodem z rozdz. 8.
+
+### 7.1 Przebieg (spec 4)
+
+| Wymagania | Status | Gdzie | Uwagi |
+|---|---|---|---|
+| FR-4.1, FR-4.2 | MVP | P4 | Jeden aktywny przebieg naraz w repozytorium. |
+| FR-4.3, FR-4.4, FR-4.5, FR-4.6 | MVP | P5 | |
+| FR-4.7, FR-4.8, FR-4.9, FR-4.10, FR-4.11, FR-4.12 | MVP | P6 | |
+| FR-4.13, FR-4.14, FR-4.15, FR-4.16, FR-4.17, FR-4.18 | MVP | P7 | Odpowiedzi Developera w wątkach publikuje kod joba. |
+| FR-4.19 | Później | F3 | |
+| FR-4.20 | Częściowo | P7 | Bez URL środowiska dev do F3. |
+| FR-4.21, FR-4.22, FR-4.24, FR-4.25, FR-4.26, FR-4.27 | Później | F2 | |
+| FR-4.23 | MVP | P4 | Filtr autorów potrzebny już w MVP (rozdz. 4). |
+| FR-4.28 | MVP | P4 | Z interpretacją z rozdz. 2.2, issue #4. |
+| FR-4.29, FR-4.30, FR-4.31, FR-4.33 | MVP | P4 | FR-4.31: limit kosztu jako szacunek zużycia. |
+| FR-4.32 | Częściowo | P4 | Komentarze z czasu przerwy obsługuje F2. |
+
+### 7.2 Agenci, human-in-the-loop i bramki (spec 5, 6, 7)
+
+| Wymagania | Status | Gdzie | Uwagi |
+|---|---|---|---|
+| FR-5.1 | MVP | P4 do P7 | Osobny job, sesja i token na rolę. |
+| FR-5.2 | MVP | P3, P7 | Reviewer publikuje tylko check run; merge wymaga approvalu code ownera. |
+| FR-5.3, FR-5.5 | MVP | P7 | |
+| FR-5.4 | MVP | P2, P7 | Lista narzędzi, hook SEC-9.7, brak tokenu GitHub w sesji. |
+| FR-5.6 | MVP | P4 | |
+| FR-5.7 | Później | F3 | |
+| FR-5.8 | Częściowo | P5 do P7, F4 | Prompty wersjonowane od MVP; bramka ewaluacji w F4. |
+| FR-6.1, FR-10.3 | MVP | P5 | |
+| FR-6.2, FR-6.4 | MVP | P7 | |
+| FR-6.3 | MVP | P3 | |
+| FR-6.5 | MVP | P2, P3 | Brak tokenu w sesji, hook SEC-9.8, App bez wyjątku od branch protection. |
+| FR-6.6 | MVP | P3 | Repozytorium demo nie ma środowisk staging ani produkcja. Wymóg recenzentów wraca przy pierwszym takim środowisku. |
+| FR-6.7 | MVP | P4 | Pipeline nie ma ścieżki, w której agent przyznaje wyjątek. |
+| QG-7.1, QG-7.2, QG-7.3, QG-7.4, QG-7.5, QG-7.6, QG-7.7, QG-7.8 | MVP | P3 | Narzędzia w rozdz. 3.6. |
+| QG-7.9 | MVP | P6 | |
+| QG-7.10 | MVP | P7 | |
+| QG-7.11 | MVP | P2, P3, P6 | Hooki, App bez `workflows`, zmiany konfiguracji bramek są high-impact. |
+| QG-7.12 | MVP | P3 | |
+| QG-7.13 | Później | F5 | W MVP niezaliczona bramka zawsze wraca do Developera, a po wyczerpaniu ponowień przebieg trafia do `needs-human`. |
+
+### 7.3 Bezpieczeństwo i hooki (spec 8, 9)
+
+| Wymagania | Status | Gdzie | Uwagi |
+|---|---|---|---|
+| SEC-8.1, SEC-8.2 | MVP | P3, P4 | |
+| SEC-8.3 | MVP | P4 | Runnery hostowane przez GitHub to jednorazowe maszyny per job. |
+| SEC-8.4 | Odstępstwo | P2, F6 | Częściowo przez sandbox poleceń powłoki w Claude Code (do potwierdzenia). |
+| SEC-8.5 | MVP | P2, P5 do P7 | |
+| SEC-8.6, SEC-8.7, SEC-8.9 | MVP | P4 | Liczenie M-E06 w F5. |
+| SEC-8.8 | MVP | P4 | W trybie Actions GitHub dostarcza zdarzenia wewnętrznie i nie ma publicznego endpointu webhooków. Wymóg wraca przy własnym serwerze. |
+| SEC-8.10 | MVP | P5 do P7 | Agent dostaje tylko issue, plan, diff i przestrzeń roboczą repozytorium demo. |
+| SEC-9.0a, SEC-9.0b | MVP | P2 | |
+| SEC-9.0c | Częściowo | P2 | Razem z SEC-8.4. |
+| SEC-9.1, SEC-9.2, SEC-9.3, SEC-9.4, SEC-9.5, SEC-9.6, SEC-9.7, SEC-9.8 | MVP | P2 | SEC-9.4 w granicach SEC-8.4. |
+| QG-9.9, SEC-9.10, NFR-9.11, QG-9.12 | MVP | P2 | |
+| QG-9.13, QG-9.14, QG-9.15 | MVP | P0, P3 | |
+
+### 7.4 Konfiguracja, obserwowalność i ewaluacje (spec 10, 11, 12)
+
+| Wymagania | Status | Gdzie | Uwagi |
+|---|---|---|---|
+| FR-10.1, FR-10.2 | MVP | P1 | |
+| NFR-11.1 | Odstępstwo | F5 | W MVP JSONL jako artefakt workflow. |
+| NFR-11.2, NFR-11.6 | Później | F5 | |
+| NFR-11.3, NFR-11.4 | MVP | P4 | |
+| NFR-11.5 | Częściowo | P4 | Limity czasu i tur są egzekwowane; koszt to szacunek zużycia. |
+| QG-12.1, QG-12.5, QG-12.6, QG-12.7 | Później | F4 | |
+| QG-12.3 | Częściowo | P2, P8, F4 | Przypadki ataku w testach hooków i w teście end-to-end. |
+| QG-12.4 | Odstępstwo | F4 | |
+
+### 7.5 Historyjki użytkownika i metryki
+
+| Historyjki | Status | Gdzie |
+|---|---|---|
+| US-1, US-3, US-7 | MVP | P4, P5 |
+| US-2 | MVP | P5, P7 |
+| US-4 | MVP | P1 |
+| US-5 | Częściowo | P7; link do dev w F3 |
+| US-6 | Później | F2 |
+| US-8 | MVP | P3 |
+| US-9 | Częściowo | P4 (log i zużycie); pełny ślad w F5 |
+| US-10 | Później | F5 |
+
+Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3, więc F5 będzie miała dane historyczne. Kryteria ukończenia MVP sprawdzają ręcznie odpowiedniki M-E02 i M-E10.
+
+---
+
+## 8. Świadome odstępstwa od specyfikacji w MVP
+
+| Odstępstwo | Powód | Zamknięcie |
+|---|---|---|
+| Brak spike'u frameworków (spec 13.4 pkt 4) | Warunek zera kosztów | Decyzja w rozdz. 2.2; opcjonalny spike w F4 |
+| Brak stanu `deploying-dev` (FR-4.19) | Najmniejszy działający przebieg | F3 |
+| Brak stanu `handling-comments` (spec 4.7) | Najmniejszy działający przebieg | F2 |
+| Brak bramki ewaluacji (QG-12.4) | Zestaw ewaluacji wymaga pracy ludzi i limitu Pro | F4; do tego czasu testy hooków |
+| JSONL zamiast logu tylko do dopisywania i trace (NFR-11.1, NFR-11.2) | Zero infrastruktury | F5 |
+| Allowlista ruchu sieciowego tylko częściowo (SEC-8.4, SEC-9.0c) | Runnery hostowane przez GitHub nie mają wbudowanej allowlisty | F6 |
+| Limit kosztu jako szacunek zużycia (NFR-11.5) | Subskrypcja zamiast płatności za tokeny | Do czasu zmiany modelu rozliczeń |
+| Brak linii bazowej i dashboardu z fazy 0 (spec 14.13, spec 15) | Nie mają sensu, zanim pipeline zadziała | F5 |
+
+---
+
+## 9. Ryzyka MVP
+
+| Ryzyko | Skutek | Środek zaradczy |
+|---|---|---|
+| Limity planu Pro są wspólne z codzienną pracą autora | Przebiegi spowalniają pracę i odwrotnie; przebiegi kończą się w `needs-human` | Jeden przebieg naraz, limit tur na etap, ręczne uruchamianie testów end-to-end |
+| Zmiana warunków użycia tokenu subskrypcji w CI | Pipeline przestaje być darmowy albo dozwolony | Sprawdzenie w P2; droga zapasowa przez `anthropics/claude-code-action`, który oficjalnie obsługuje ten token |
+| Opus niedostępny w planie Pro | Reviewer na Haiku, słabsze review (M-D03) | Bramki deterministyczne i finalne review człowieka |
+| Wyciek tokenu przez publiczne logi lub artefakty w postaci, której GitHub nie zamaskuje | Ktoś zużywa limity autora | Środki z rozdz. 4, przegląd logów w P8, procedura rotacji |
+| Prompt injection przez publiczne issue | Agent próbuje niebezpiecznych działań | Etykietę dodaje tylko triage, treść niezaufana, agent bez tokenu GitHub, hooki |
+| Obcy zakładają issue i komentują | Uruchamia się job `decide` | Zużywa tylko darmowe minuty Actions, nie limit Pro |
+| Wyścigi i ręczne edycje komentarza ze stanem | Niespójny stan przebiegu | `concurrency` per issue, weryfikacja autora komentarza, wersja schematu |
+| Zmiany w Claude Code CLI | Inne flagi lub zachowanie hooków | Przypięta wersja, testy hooków w CI |
+| Dziedziczenie tokenu przez polecenia powłoki | Agent może odczytać token | Sprawdzenie w P2, oczyszczone środowisko, blokada `env` i `printenv`, redakcja wyników |
+| Zmiana pipeline'u wymaga nowego tagu w repozytorium demo | Repozytorium demo działa na starej wersji | Tag przy każdym przyroście, aktualizacja tagu jako część PR przyrostu |
+
+---
+
+## 10. Kroki ręczne autora
+
+Tokeny i klucze ustawia autor. Agent implementujący plan ich nie wpisuje.
+
+1. Uruchomić `claude setup-token` i dodać wynik jako sekret `CLAUDE_CODE_OAUTH_TOKEN` w środowisku `agents` repozytorium demo, a nie jako sekret całego repozytorium.
+2. Utworzyć GitHub App z uprawnieniami: contents, pull requests, issues i checks do zapisu, metadata do odczytu, bez `workflows`. Wygenerować klucz prywatny.
+3. Zainstalować aplikację w repozytorium demo. Dodać sekret `APP_PRIVATE_KEY` i zmienną `APP_ID`.
+4. Zgodzić się na utworzenie repozytorium demo i ustawienie branch protection w P3.
+
+---
+
+## 11. Pytania otwarte
+
+| Pytanie | Status |
+|---|---|
+| OQ-1 | Rozstrzygnięte dla MVP (rozdz. 2.2); repozytorium pilotażu w F6 |
+| OQ-2 | Otwarte, potrzebne w F3 |
+| OQ-3, OQ-5, OQ-7, OQ-8, OQ-10 | Rozstrzygnięte dla MVP (rozdz. 2.2) |
+| OQ-4 | Otwarte, potrzebne w F4 |
+| OQ-6, OQ-9 | Otwarte, potrzebne w F5 |
+| OQ-11 | Założenie do potwierdzenia: właścicielem jest autor |
+| OQ-12 | Otwarte, potrzebne w F6 |
+
+---
+
+## 12. Założenia do potwierdzenia
+
+Poniższe założenia pochodzą z wiedzy autora planu, a nie z testów. Każde zostanie potwierdzone albo zastąpione w przyroście w nawiasie.
+
+1. `claude -p` działa na runnerze GitHub Actions z `CLAUDE_CODE_OAUTH_TOKEN`, a warunki Anthropic dla planu Pro pozwalają na takie użycie (P2).
+2. `claude-opus-5-5` jest dostępny w Claude Code w planie Pro (P2).
+3. Flagi CLI z rozdz. 3.4 działają w przypiętej wersji, a wynik w JSON zawiera zużycie tokenów i szacunek kosztu także przy subskrypcji (P2).
+4. Polecenia powłoki uruchamiane przez agenta nie muszą dziedziczyć tokenu; jeśli Claude Code nie pozwala tego wyłączyć, polecenia działają w sandboxie bez tej zmiennej (P2).
+5. Sandbox poleceń powłoki w Claude Code na runnerze Linux pozwala ograniczyć ruch sieciowy (P2).
+6. Błąd lub przekroczenie czasu hooka da się zamienić na blokadę (SEC-9.0a), w razie potrzeby przez opakowanie w samym skrypcie hooka (P2).
+7. `actions/create-github-app-token` zawęża uprawnienia tokenu parametrami `permission-*` (P3).
+8. Limity planu Pro mieszczą co najmniej cztery przebiegi testowe w rozsądnym czasie (P8).
