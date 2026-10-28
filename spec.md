@@ -144,6 +144,7 @@ Stany `stopped` i `done` są końcowe. Wszystkie pozostałe stany są **aktywne*
 | `awaiting-plan-approval` | Człowiek akceptuje plan | `developing` |
 | `awaiting-plan-approval` | Człowiek żąda zmian w planie | `planning` |
 | `developing` | Developer wypycha commit | `gating` |
+| `developing` | Developer aktualizuje plan, a nowa wersja jest high-impact (FR-4.11) | `awaiting-plan-approval` |
 | `gating` | Dowolna bramka nie przechodzi | `developing` (bez zużycia rundy review) |
 | `gating` | Wszystkie bramki przechodzą | `reviewing` |
 | `reviewing` | Werdykt `changes_requested`, limity nieprzekroczone | `developing` |
@@ -173,6 +174,8 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
   - klasyfikację high-impact wraz z uzasadnieniem.
 - **FR-4.4** Planner MUSI sklasyfikować zmianę według kryteriów high-impact (FR-6.1). Plan high-impact przenosi przebieg do `awaiting-plan-approval`. Każdy inny plan jest publikowany dla wglądu, a przebieg toczy się dalej bez czekania.
 - **FR-4.5** Człowiek akceptuje plan etykietą `plan:approved` albo żąda zmian w komentarzu. Żądanie zmian odsyła plan do Plannera.
+  - Akceptacją jest wyłącznie dodanie etykiety, gdy przebieg jest w `awaiting-plan-approval`. Akceptacja dotyczy ostatniej opublikowanej wersji planu, a magazyn stanu zapisuje numer tej wersji, autora etykiety i czas (FR-4.6). Etykieta dodana w innym stanie nie jest akceptacją.
+  - Zanim pipeline opublikuje wersję planu, która wymaga akceptacji (FR-4.4, FR-4.11), MUSI zdjąć z issue etykietę `plan:approved`, jeśli tam jest. Etykieta z wcześniejszej akceptacji nie przechodzi więc na nową wersję, a człowiek akceptuje nową wersję zwykłym dodaniem etykiety, bo GitHub wysyła zdarzenie tylko wtedy, gdy etykiety jeszcze nie było.
 - **FR-4.6** Każda wersja planu MUSI być zachowana. Bramki i Reviewer MUSZĄ używać ostatniej zaakceptowanej wersji dla zmian high-impact, a w pozostałych przypadkach ostatniej opublikowanej.
 
 ### 4.4 Implementacja i bramki automatyczne
@@ -181,7 +184,7 @@ Ze stanów `stopped` i `done` nie ma przejść. Dalszą pracę nad issue rozpocz
 - **FR-4.8** Developer MUSI otworzyć draft PR po pierwszym pushu. Opis PR zawiera `Closes #<numer-issue>`.
 - **FR-4.9** Komunikaty commitów MUSZĄ być zgodne z Conventional Commits i odwoływać się do issue. Wymusza to hook `commit-msg` (QG-9.14).
 - **FR-4.10** Gdy Developer zauważy problem poza zakresem issue, MUSI otworzyć osobne issue i NIE MOŻE naprawiać tego problemu w tym PR. Opis PR wymienia te issue.
-- **FR-4.11** Gdy potrzebna jest zmiana poza planem (np. poprawa miejsc wywołania po zmianie sygnatury), Developer MUSI najpierw zaktualizować plan, podając powód. Jeśli zaktualizowany plan spełnia kryteria high-impact, przebieg przechodzi do `awaiting-plan-approval`.
+- **FR-4.11** Gdy potrzebna jest zmiana poza planem (np. poprawa miejsc wywołania po zmianie sygnatury), Developer MUSI najpierw zaktualizować plan, podając powód. Jeśli zaktualizowany plan spełnia kryteria high-impact, przebieg przechodzi do `awaiting-plan-approval` i czeka na akceptację nowej wersji (FR-4.5).
 - **FR-4.12** Każdy push MUSI uruchamiać bramki automatyczne (sekcja 7). Niezaliczona bramka odsyła swój wynik do Developera i nie zużywa rundy review.
 
 ### 4.5 Pętla review
@@ -472,7 +475,7 @@ Gdy agent zgłasza zakończenie pracy:
 | Issue oznaczone `agent:ready` | Dodane przez użytkownika z uprawnieniem triage lub wyższym, brak aktywnego przebiegu, ani issue, ani jego otwarty PR nie mają `agent:stop`, a wyłącznik globalny jest wyłączony | Start przebiegu (FR-4.1, FR-4.28b) |
 | Issue oznaczone `agent:ready` | Issue lub jego otwarty PR ma `agent:stop` albo wyłącznik globalny jest włączony | Zdjęcie `agent:ready` i komentarz w issue (FR-4.28b, FR-4.34) |
 | Issue lub PR oznaczone `agent:stop` | Przebieg jest w stanie aktywnym (sekcja 4.1) | Zatrzymanie przebiegu (FR-4.28, FR-4.28a) |
-| Issue oznaczone `plan:approved` | Przebieg jest w `awaiting-plan-approval` | Przejście do `developing` |
+| Issue oznaczone `plan:approved` | Przebieg jest w `awaiting-plan-approval` | Akceptacja ostatniej opublikowanej wersji planu i przejście do `developing` (FR-4.5) |
 | Komentarz do issue | Przebieg jest w `awaiting-plan-approval`, autor ma prawo zapisu | Planner poprawia plan |
 | Wysłane review PR | Zarządzany PR, autor ma prawo zapisu | Obsługa wszystkich komentarzy review (FR-4.22) |
 | Komentarz do review poza review albo komentarz pod PR | Zarządzany PR, autor ma prawo zapisu | Obsługa po opóźnieniu (FR-4.22) |

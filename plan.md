@@ -32,6 +32,7 @@ stateDiagram-v2
     APA --> developing: etykieta akceptacji planu
     APA --> planning: komentarz z prośbą o zmiany
     developing --> gating: push
+    developing --> APA: aktualizacja planu do high-impact
     gating --> developing: bramka niezaliczona
     gating --> reviewing: bramki zaliczone
     reviewing --> developing: changes_requested
@@ -246,7 +247,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 ### P5. Planner
 
-- **Zakres:** prompt Plannera, komentarz z planem i blokiem `sdlc-plan` w YAML (lista plików z jednym zdaniem uzasadnienia przy każdym), klasyfikacja high-impact jako suma reguł deterministycznych (ścieżki z konfiguracji, manifesty zależności, pliki CI, `.sdlc-agents.yml`, limity rozmiaru) i oceny modelu (bezpieczeństwo, publiczne API). Suma, bo przeoczenie zmiany high-impact jest droższe niż fałszywy alarm (spec 12.2). Każda wersja planu jako osobny komentarz z numerem. Akceptacja etykietą `plan:approved` i poprawki po komentarzu człowieka. W nowym przebiegu po zatrzymaniu Planner dostaje poprzednie plany, podsumowanie zatrzymania, nowe komentarze i diff brancha.
+- **Zakres:** prompt Plannera, komentarz z planem i blokiem `sdlc-plan` w YAML (lista plików z jednym zdaniem uzasadnienia przy każdym), klasyfikacja high-impact jako suma reguł deterministycznych (ścieżki z konfiguracji, manifesty zależności, pliki CI, `.sdlc-agents.yml`, limity rozmiaru) i oceny modelu (bezpieczeństwo, publiczne API). Suma, bo przeoczenie zmiany high-impact jest droższe niż fałszywy alarm (spec 12.2). Każda wersja planu jako osobny komentarz z numerem. Akceptacja etykietą `plan:approved` dodaną w `awaiting-plan-approval`, z numerem zaakceptowanej wersji w komentarzu ze stanem, zdejmowanie `plan:approved` przed publikacją każdej wersji wymagającej akceptacji i poprawki po komentarzu człowieka. W nowym przebiegu po zatrzymaniu Planner dostaje poprzednie plany, podsumowanie zatrzymania, nowe komentarze i diff brancha.
 - **Wymagania:** FR-4.3 do FR-4.6, FR-4.28b, FR-6.1, FR-10.3, SEC-8.5, SEC-8.10.
 - **Gotowe, gdy:** na trzech issue testowych plan ma wszystkie elementy z FR-4.3, zmiana z nową zależnością jest sklasyfikowana jako high-impact, a przebieg czeka na `plan:approved`.
 - **Zależy od:** P4.
@@ -255,7 +256,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 - **Zakres:** prompt Developera, sesja bez tokenu GitHub, commit i push wykonywane przez kod joba, Conventional Commits z odwołaniem do issue, draft PR z `Closes #<numer>`, issue spoza zakresu, aktualizacja planu z powodem, powrót do Developera po niezaliczonej bramce, bramka zakresu `gates/scope` w CI repozytorium demo. W nowym przebiegu po zatrzymaniu: kontynuacja brancha otwartego PR ze scaleniem `main` przez kod joba przed sesją agenta albo nowy branch i nowy draft PR, gdy poprzedni PR zamknięto.
 - **Wymagania:** FR-4.7 do FR-4.12, FR-4.28b, QG-7.9, QG-7.11.
-- **Gotowe, gdy:** prosta funkcja z issue testowego przechodzi bramki, plik spoza planu nie przechodzi bramki zakresu, a niezaliczona bramka wraca do Developera bez zużycia rundy review.
+- **Gotowe, gdy:** prosta funkcja z issue testowego przechodzi bramki, plik spoza planu nie przechodzi bramki zakresu, a niezaliczona bramka wraca do Developera bez zużycia rundy review. Aktualizacja planu do high-impact przenosi przebieg do `awaiting-plan-approval`, zdejmuje `plan:approved` i czeka na ponowne dodanie etykiety.
 - **Zależy od:** P5.
 
 ### P7. Reviewer i pętla review
