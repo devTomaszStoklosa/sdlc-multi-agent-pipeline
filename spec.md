@@ -313,6 +313,8 @@ Wymagania:
   - co najmniej jednego approval od człowieka będącego właścicielem kodu (code owner);
   - braku bezpośrednich pushów i braku force-pushów.
 
+  Każdy wymagany status check MUSI mieć przypięte źródło: aplikację, która go wystawia. Źródłem `agent-review` jest wyłącznie tożsamość pipeline'u (FR-6.2). Check ani status o tej samej nazwie z innego źródła NIE MOŻE spełniać wymogu.
+
   Wymóg `agent-review` MOŻE obejść przy merge PR wyłącznie człowiek z listy obejść, np. przy PR spoza pipeline'u albo PR po zatrzymaniu przebiegu (FR-4.28). Obejście NIE MOŻE zwalniać z bramek z sekcji 7, approvalu code ownera ani zakazu bezpośrednich pushów i force-pushów. Tożsamość pipeline'u NIE MOŻE być na liście obejść ani w inny sposób omijać branch protection.
 - **FR-6.4** Prośba o finalną akceptację człowieka MUSI zawsze być ostatnim krokiem przed merge.
 - **FR-6.5** Merge może wykonać tylko człowiek. Agenci NIE MOGĄ mergować i NIE MOGĄ włączać auto-merge.
@@ -366,6 +368,7 @@ Intencja wymaga ścisłego przestrzegania zasad programowania. Każda zasada jes
 - **QG-7.11** Agenci NIE MOGĄ pomijać, wyłączać ani osłabiać bramek. Zmiany konfiguracji bramek to pliki CI, a więc zmiany high-impact (FR-6.1).
 - **QG-7.12** CI MUSI uruchamiać te same sprawdzenia co lokalne hooki gita (sekcja 9.3), bo lokalne hooki da się obejść.
 - **QG-7.13** Wyjątek dla niezaliczonej bramki może przyznać tylko człowiek. Wyjątek jest zapisany w PR z bramką, powodem i osobą zatwierdzającą, a także liczony w M-E08 i M-E13.
+- **QG-7.14** Joby CI, które uruchamiają kod z repozytorium, NIE MOGĄ mieć uprawnień do tworzenia check runów ani commit statusów (w GitHub Actions: `checks: write` i `statuses: write`), żeby kod z PR nie mógł podszyć się pod bramkę ani pod `agent-review` (FR-6.3).
 
 ---
 
