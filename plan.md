@@ -433,9 +433,10 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 Tokeny i klucze ustawia autor. Agent implementujący plan ich nie wpisuje.
 
 1. Uruchomić `claude setup-token` i dodać wynik jako sekret `CLAUDE_CODE_OAUTH_TOKEN` w środowisku `agents` repozytorium demo, a nie jako sekret całego repozytorium.
-2. Utworzyć GitHub App z uprawnieniami: contents, pull requests, issues i checks do zapisu, metadata do odczytu, bez `workflows`. Wygenerować klucz prywatny.
+2. Utworzyć GitHub App z uprawnieniami: contents, pull requests, issues i checks do zapisu, metadata do odczytu, bez `workflows`. Webhook aplikacji jest wyłączony, bo zdarzenia dostarcza GitHub Actions. Wygenerować klucz prywatny.
 3. Zainstalować aplikację w repozytorium demo. Dodać sekret `APP_PRIVATE_KEY` i zmienną `APP_ID`.
-4. Zgodzić się na utworzenie repozytorium demo i ustawienie branch protection w P3.
+4. Włączyć dependency graph w repozytorium demo. Nowe repozytorium publiczne go nie ma, a bez niego bramka `dependency-review` (QG-7.4) kończy się błędem.
+5. Zgodzić się na utworzenie repozytorium demo i ustawienie branch protection w P3.
 
 ---
 
@@ -463,11 +464,11 @@ Poniższe założenia pochodzą z wiedzy autora planu, a nie z testów. Każde z
 4. Polecenia powłoki uruchamiane przez agenta nie muszą dziedziczyć tokenu; jeśli Claude Code nie pozwala tego wyłączyć, polecenia działają w sandboxie bez tej zmiennej (P2).
 5. Sandbox poleceń powłoki w Claude Code na runnerze Linux pozwala ograniczyć ruch sieciowy (P2).
 6. Błąd lub przekroczenie czasu hooka da się zamienić na blokadę (SEC-9.0a), w razie potrzeby przez opakowanie w samym skrypcie hooka (P2).
-7. `actions/create-github-app-token` zawęża uprawnienia tokenu parametrami `permission-*` (P3).
+7. `actions/create-github-app-token` zawęża uprawnienia tokenu parametrami `permission-*` (P3). **Potwierdzone w P3:** token z samym `permission-issues: read` czyta issue, a utworzenie etykiety kończy się błędem 403. Żądanie uprawnienia, którego instalacja nie ma (`workflows`), kończy się błędem tworzenia tokenu.
 8. Limity planu Pro mieszczą co najmniej cztery przebiegi testowe w rozsądnym czasie (P8).
 9. Job pominięty warunkiem `if` nie wchodzi do grupy `concurrency` i nie usuwa z niej czekających runów. Jeśli to się nie potwierdzi, filtr autorów działa w osobnym workflow, który uruchamia `orchestrate.yml` zdarzeniem `workflow_dispatch` (P4).
 10. `GITHUB_TOKEN` z uprawnieniem `actions: write` w repozytorium demo anuluje run workflow, który wywołuje reusable workflow z repozytorium pipeline'u (P4).
 11. Anulowany job roli kończy się w ciągu kilku sekund, a proces `claude -p` nie działa dłużej niż job (P4).
-12. Obejście rulesetów approvalu i review agenta nie zwalnia z reguł rulesetu bramek, w tym z wymogu zmian przez PR. Rolę administratora repozytorium da się dodać do listy obejść w repozytorium konta osobistego, a ta rola nie obejmuje GitHub App pipeline'u (P3).
-13. Ruleset pozwala przypiąć źródło każdego wymaganego checku do aplikacji, która go wystawia, także dla check runów z GitHub Actions (P3).
-14. Obejście przy merge PR zwalnia naraz ze wszystkich rulesetów, które administrator może obejść. Jeśli da się obejść tylko wybrany ruleset, obejście `agent-review` przestaje zwalniać z approvalu, a odstępstwo z rozdz. 8 się zawęża (P3).
+12. Obejście rulesetów approvalu i review agenta nie zwalnia z reguł rulesetu bramek, w tym z wymogu zmian przez PR. Rolę administratora repozytorium da się dodać do listy obejść w repozytorium konta osobistego, a ta rola nie obejmuje GitHub App pipeline'u (P3). **Potwierdzone w P3:** rola administratora repozytorium jest na liście obejść rulesetów approvalu i review agenta w repozytorium konta osobistego. Przy niezaliczonej bramce widok merge'u nie oferuje obejścia. Push administratora na `main` jest odrzucany (`GH013`), także z powodu braku `agent-review` i wymogu zmian przez PR, więc obejście działa tylko przy merge PR. App nie ma roli w repozytorium ani nie jest na liście obejść: PR z check runem `agent-review` od App i bez approvalu pozostaje zablokowany.
+13. Ruleset pozwala przypiąć źródło każdego wymaganego checku do aplikacji, która go wystawia, także dla check runów z GitHub Actions (P3). **Potwierdzone w P3:** ruleset przyjmuje źródło GitHub Actions (`integration_id` 15368) dla bramek i GitHub App pipeline'u dla `agent-review`. Przy chwilowo wyłączonym rulesecie approvalu PR z zielonymi bramkami miał stan `clean` tylko z check runem `agent-review` od App. Z commit statusem `agent-review` ustawionym tokenem autora i z check runem `agent-review` od GitHub Actions był `blocked`. Uwaga: nowy widok statusu merge'u (Preview) pokazuje status z obcego źródła jako zaliczony, choć ruleset go nie uznaje.
+14. Obejście przy merge PR zwalnia naraz ze wszystkich rulesetów, które administrator może obejść. Jeśli da się obejść tylko wybrany ruleset, obejście `agent-review` przestaje zwalniać z approvalu, a odstępstwo z rozdz. 8 się zawęża (P3). **Potwierdzone w P3:** widok merge'u ma jedno pole obejścia („bypass rules”) dla wszystkich rulesetów, które administrator może obejść. Nie da się wybrać pojedynczego rulesetu, więc odstępstwo z rozdz. 8 zostaje bez zmian.
