@@ -23,6 +23,13 @@ on:
             test: npm test
             lint: npx eslint --max-warnings=0 --no-warn-ignored
             format: npx prettier --write --ignore-unknown
+    # The caller passes the token by name, although it exists only in the
+    # `agents` environment: an environment secret that the caller does not
+    # pass is an empty string here.
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: The Claude Code token from the caller's `agents` environment.
+        required: true
 
 permissions:
   contents: read
@@ -40,6 +47,16 @@ jobs:
       # its own hooks or the audit log.
       - name: Choose the session directory
         run: echo "SESSION_DIR=$RUNNER_TEMP/agent-session" >> "$GITHUB_ENV"
+
+      # `required` checks only that the caller passes the secret, not its value.
+      - name: Check that the token is available
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::The token is empty: pass CLAUDE_CODE_OAUTH_TOKEN by name from the calling workflow."
+            exit 1
+          fi
 
       - name: Check out the calling repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
