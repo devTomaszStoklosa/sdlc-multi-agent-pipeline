@@ -7,6 +7,7 @@ Specyfikacja pipeline'u, w którym wyspecjalizowani agenci AI przejmują GitHub 
 - [intent.md](intent.md): intencja, czyli problem, oczekiwany rezultat, ograniczenia i pytania otwarte.
 - [spec.md](spec.md): specyfikacja, czyli przebieg i maszyna stanów, agenci, bramki, bezpieczeństwo, hooki, konfiguracja repozytorium, ewaluacje, porównanie frameworków, metryki i rollout.
 - [plan.md](plan.md): plan techniczny MVP, czyli decyzje przy warunku zera kosztów, architektura, ochrona tokenu subskrypcji, przyrosty P0–P8, fazy po MVP i śledzenie wymagań.
+- [config/org-baseline.yml](config/org-baseline.yml): bazowy zestaw organizacji, czyli najłagodniejsze dopuszczalne wartości `.sdlc-agents.yml`, które repozytorium może tylko zaostrzyć (FR-10.2).
 
 ## Najważniejsze założenia
 
@@ -43,7 +44,8 @@ Skrypty:
 - `npm run lint`: ESLint z progami złożoności i rozmiaru;
 - `npm run format` i `npm run format:check`: Prettier (bez plików Markdown);
 - `npm run duplication`: jscpd z progiem 3%;
-- `npm test`: Vitest.
+- `npm test`: Vitest;
+- `npm run validate-config -- <ścieżka>`: walidacja `.sdlc-agents.yml` schematem i bazowym zestawem organizacji. Kod wyjścia 0 oznacza poprawną konfigurację, 1 niepoprawną, a 2 błąd użycia lub odczytu. Ścieżka jest względna wobec katalogu tego repozytorium. Skrypt uruchamia TypeScript bez kroku budowania, przez usuwanie typów w Node 22, więc kod pipeline'u nie używa składni, która wymaga transpilacji (`erasableSyntaxOnly` w `tsconfig.json`).
 
 ## Autor
 
