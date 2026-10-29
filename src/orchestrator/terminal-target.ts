@@ -4,15 +4,18 @@ import type { RunRecord } from "../core/run-store/run-record.ts";
 import { issueOfBranch } from "./branch.ts";
 import type { GitHubEvent } from "./filter.ts";
 
-// The run that a stop or a closed pull request ends (FR-4.28, FR-4.35).
-export interface TerminalTarget {
-  kind: "stop" | "close";
-  issue: number;
-  where: "issue" | "pr";
-  pr?: number;
-  actor: string;
-  merged?: boolean;
-}
+// The run that a stop or a closed pull request ends (FR-4.28, FR-4.35). The
+// first job hands it to the second, which validates it again.
+export const terminalTargetSchema = z.strictObject({
+  kind: z.enum(["stop", "close"]),
+  issue: z.number().int().min(1),
+  where: z.enum(["issue", "pr"]),
+  pr: z.number().int().min(1).optional(),
+  actor: z.string(),
+  merged: z.boolean().optional(),
+});
+
+export type TerminalTarget = z.infer<typeof terminalTargetSchema>;
 
 export type TargetResult =
   { ok: true; target: TerminalTarget } | { ok: false; reason: string };

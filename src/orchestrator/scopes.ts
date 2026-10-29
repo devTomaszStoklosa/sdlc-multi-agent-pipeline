@@ -36,9 +36,10 @@ export const TERMINATE_SCOPE: Scope = {
   "pull-requests": "read",
 };
 
-// One `name=value` line per permission, for the inputs of
-// actions/create-github-app-token. A permission the scope lacks is empty, so
-// the token does not get it.
-export function scopeOutputs(scope: Scope): string[] {
-  return TOKEN_PERMISSIONS.map((name) => `${name}=${scope[name] ?? ""}`);
+// The inputs of actions/create-github-app-token, one per permission. A
+// permission the scope lacks is empty, so the token does not get it.
+export function scopeOutputs(scope: Scope): Record<string, string> {
+  return Object.fromEntries(
+    TOKEN_PERMISSIONS.map((name) => [name, scope[name] ?? ""]),
+  );
 }
