@@ -18,9 +18,11 @@ import {
   type EffectScope,
 } from "./role-effects.ts";
 import type { RoleJobOutput, RoleOutcome } from "./role-output.ts";
+import { watchForStop, type Wait } from "./stop-watch.ts";
 
 export interface RoleJobContext extends JobContext {
   runner: RoleRunner;
+  stopWatch: { intervalMs: number; wait: Wait };
 }
 
 const RETRYABLE = new Set(["infra", "usage-limit"]);
@@ -59,20 +61,31 @@ async function attempt(
       usage: NO_USAGE,
     };
   } catch (error) {
+    // A stop ends the job without side effects; the time limit escalates.
+    if (signal.reason instanceof RunInactiveError) throw signal.reason;
     if (signal.aborted) return "timed-out";
     const message = error instanceof Error ? error.message : String(error);
     return { status: "failed", failure: "infra", message, usage: NO_USAGE };
   }
 }
 
+interface SessionLimits {
+  retries: number;
+  minutes: number;
+  stop: AbortSignal;
+}
+
 // One stage: the session and its retries after infrastructure errors, within
-// the run's remaining time (FR-4.30, NFR-11.5).
+// the run's remaining time (FR-4.30, NFR-11.5), until a stop.
 async function session(
   context: RoleJobContext,
   input: Omit<RoleInput, "attempt">,
-  limits: { retries: number; minutes: number },
+  limits: SessionLimits,
 ): Promise<Session> {
-  const signal = AbortSignal.timeout(Math.max(1, limits.minutes * 60_000));
+  const signal = AbortSignal.any([
+    AbortSignal.timeout(Math.max(1, limits.minutes * 60_000)),
+    limits.stop,
+  ]);
   let usage = NO_USAGE;
   for (let attempts = 1; ; attempts++) {
     const result = await attempt(
@@ -124,6 +137,49 @@ function outcomeOf(scope: EffectScope, ran: Session): Promise<RoleOutcome> {
   return performFailure(scope, ran.result);
 }
 
+// The session under a watch for `agent:stop` and a closed pull request, so a
+// stop does not wait for GitHub to cancel the job (NFR-4.28d).
+async function watchedSession(
+  context: RoleJobContext,
+  scope: EffectScope,
+  role: Role,
+): Promise<Session> {
+  const { run, issue } = scope;
+  const limits = runLimits(run, context.baseline);
+  const watch = watchForStop({
+    issues: context.read.issues,
+    pulls: context.read.pulls,
+    log: context.log,
+    now: context.now,
+    issue: issue.number,
+    pr: run.pr,
+    runId: run.id,
+    workflowRunId: context.workflowRunId,
+    ...context.stopWatch,
+  });
+  try {
+    return await session(
+      context,
+      {
+        role,
+        issue: scope.issue,
+        runId: run.id,
+        planVersion: run.progress.planVersion,
+        reviewRound: run.progress.reviewRound,
+        pushes: run.pushes,
+        findings: run.progress.findings,
+      },
+      {
+        retries: limits.stageRetries,
+        minutes: remainingMinutes(run, limits, context.now()),
+        stop: watch.signal,
+      },
+    );
+  } finally {
+    await watch.end();
+  }
+}
+
 async function work(
   context: RoleJobContext,
   issueNumber: number,
@@ -139,23 +195,7 @@ async function work(
       context.app.checks.startCheckRun(AGENT_REVIEW, pushedSha),
     );
   }
-  const limits = runLimits(run, context.baseline);
-  const ran = await session(
-    context,
-    {
-      role,
-      issue,
-      runId: run.id,
-      planVersion: run.progress.planVersion,
-      reviewRound: run.progress.reviewRound,
-      pushes: run.pushes,
-      findings: run.progress.findings,
-    },
-    {
-      retries: limits.stageRetries,
-      minutes: remainingMinutes(run, limits, context.now()),
-    },
-  );
+  const ran = await watchedSession(context, scope, role);
   const outcome = await outcomeOf(scope, ran);
   return {
     status: "done",

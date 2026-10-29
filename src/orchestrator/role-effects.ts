@@ -12,7 +12,7 @@ export interface EffectScope {
   context: JobContext;
   guard: RunGuard;
   run: Run;
-  issue: { number: number; title: string };
+  issue: { number: number; title: string; body: string };
   // The in-progress `agent-review` check run of a Reviewer job.
   checkRunId?: number;
 }

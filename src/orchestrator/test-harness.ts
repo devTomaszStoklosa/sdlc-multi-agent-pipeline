@@ -72,6 +72,14 @@ export class Harness {
       workflowRunId,
       gatesWorkflow: "Gates",
       runner: new StubRoleRunner(() => Promise.resolve()),
+      // Checks between the steps of a test, as the sessions here take no time.
+      stopWatch: {
+        intervalMs: 0,
+        wait: () =>
+          new Promise((resolve) => {
+            setImmediate(resolve);
+          }),
+      },
     };
   }
 

@@ -14,6 +14,7 @@ import { decide } from "./decide.ts";
 import { filterEvent } from "./filter.ts";
 import { runRoleJob } from "./role-job.ts";
 import { roleJobOutputSchema } from "./role-output.ts";
+import { STOP_WATCH_MS } from "./stop-watch.ts";
 import {
   ORCHESTRATOR_SCOPE,
   ROLE_SCOPES,
@@ -103,7 +104,12 @@ async function roleCommand(given: Args): Promise<void> {
   const read = github(TOKENS.read);
   const store = new CommentRunStateStore(read.comments, appId());
   const output = await runRoleJob(
-    { ...context, store, runner: new StubRoleRunner() },
+    {
+      ...context,
+      store,
+      runner: new StubRoleRunner(),
+      stopWatch: { intervalMs: STOP_WATCH_MS, wait },
+    },
     given.issue,
     roleOf(given),
   );

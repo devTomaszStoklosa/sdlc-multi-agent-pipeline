@@ -89,8 +89,8 @@ export async function jobContext(tokens: Tokens): Promise<JobContext> {
   };
 }
 
-export async function wait(ms: number): Promise<void> {
-  await sleep(ms);
+export async function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  await sleep(ms, undefined, { signal });
 }
 
 // The run events in the artifacts of a workflow run, downloaded into a
