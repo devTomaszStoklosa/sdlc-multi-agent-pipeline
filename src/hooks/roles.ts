@@ -1,6 +1,10 @@
 export const ROLES = ["planner", "developer", "reviewer"] as const;
 export type Role = (typeof ROLES)[number];
 
+export function isRole(value: string): value is Role {
+  return (ROLES as readonly string[]).includes(value);
+}
+
 export const READ_TOOLS = ["Read", "Grep", "Glob"] as const;
 export const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit"];
 
