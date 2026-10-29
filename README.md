@@ -48,6 +48,7 @@ Skrypty:
 - `npm run validate-config -- <ścieżka>`: walidacja `.sdlc-agents.yml` schematem i bazowym zestawem organizacji. Kod wyjścia 0 oznacza poprawną konfigurację, 1 niepoprawną, a 2 błąd użycia lub odczytu. Ścieżka jest względna wobec katalogu tego repozytorium. Skrypt uruchamia TypeScript bez kroku budowania, przez usuwanie typów w Node 22, więc kod pipeline'u nie używa składni, która wymaga transpilacji (`erasableSyntaxOnly` w `tsconfig.json`).
 - `npm run prepare-session -- --role <rola> --workspace <katalog> --config <.sdlc-agents.yml> --out <katalog>`: zapisuje kontekst hooków i ustawienia Claude Code dla sesji agenta (rozdz. 3.4 planu). Katalog wyjściowy musi leżeć poza przestrzenią roboczą. Sesja powinna mieć `CLAUDE_CONFIG_DIR` w tym samym katalogu, a nie w katalogu domowym. Kody wyjścia jak w `validate-config`.
 - `npm run session-summary -- --result <wynik.json> --audit <log.jsonl>`: podsumowanie sesji w Markdown bez transkryptu, z redakcją sekretów.
+- `npm run orchestrator -- <polecenie>`: kod jobów reusable workflows Orchestratora (`filter`, `scopes`, `decide`, `role`, `advance`, `target`, `cancel`, `wait-run`, `finalize`). Tokeny, zdarzenie i ścieżki czyta ze zmiennych środowiskowych GitHub Actions, a wyniki zapisuje jako outputy joba.
 
 ## Hooki agentów
 
@@ -64,6 +65,36 @@ Polecenia projektu (formatter, linter, testy) hooki uruchamiają w [bubblewrap](
 Analiza poleceń powłoki to heurystyka: nie widzi zawartości uruchamianych skryptów ani nazw plików powstałych z rozwinięcia wzorców. Drugą warstwą jest sandbox Claude Code (SEC-9.0c).
 
 Próbną sesję na runnerze uruchamia reusable workflow [agent-trial.yml](.github/workflows/agent-trial.yml), wywoływany z ręcznego workflow na `main` repozytorium demo.
+
+## Orchestrator
+
+Przebieg sterują dwa reusable workflows wywoływane z cienkich workflow repozytorium demo (rozdz. 3.5 planu):
+
+- [orchestrate.yml](.github/workflows/orchestrate.yml): job `filter` odrzuca zdarzenia botów i obcych, `decide` w grupie `concurrency` per issue liczy przejście maszyny stanów, a potem działają najwyżej dwie pary job roli i `advance`. Job roli wykonuje skutki uboczne tokenem roli, a `advance` zapisuje stan.
+- [terminate.yml](.github/workflows/terminate.yml): zatrzymanie etykietą `agent:stop` i zakończenie po zamknięciu lub merge'u PR. Job `cancel` poza grupą anuluje run przebiegu, a `finalize` zapisuje stan końcowy, zdejmuje etykiety, kończy `agent-review` i publikuje podsumowanie zatrzymania.
+
+Stan przebiegu jest w ukrytym komentarzu GitHub App w issue ([src/core/run-store](src/core/run-store)), a przejścia w [src/core/state-machine](src/core/state-machine). Każdy job zapisuje log zdarzeń w JSONL i wgrywa go jako artefakt `run-events-<job>-<próba>`.
+
+Ręczne uruchomienie workflow Orchestrate z numerem issue startuje przebieg czekający w kolejce, gdy nie ma innego aktywnego przebiegu, odbiera wynik bramek, który nie dotarł, a etap, którego job zakończył się bez wyniku, kieruje do `needs-human`.
+
+W P4 role są zaślepkami ([src/agents/stub-role.ts](src/agents/stub-role.ts)) i nie zużywają limitu planu Pro. Ich zachowanie ustala ukryty blok w treści issue, np.:
+
+```text
+<!-- sdlc-stub
+plans: [high-impact, normal]      # rodzaj planu w kolejnych wersjach
+plan_update: high-impact          # pierwszy etap Developera aktualizuje plan
+gates: [fail, pass]               # kolejne pushe nie przechodzą albo przechodzą formatowania
+verdicts: [changes_requested, approve]
+repeat_finding: true              # każde changes_requested zgłasza to samo znalezisko
+failures:
+  planner: [infra, usage-limit]   # nieudane próby etapu: infra, usage-limit, max-turns
+delay_seconds:
+  developer: 120                  # długa sesja, np. do testu zatrzymania
+cost_usd: 0.01                    # szacunek kosztu każdej sesji
+-->
+```
+
+Bez bloku plan jest zwykły, bramki przechodzą, a Reviewer zwraca `approve`. Ostatni element listy obowiązuje dla kolejnych wystąpień.
 
 ## Autor
 
