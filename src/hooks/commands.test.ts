@@ -104,7 +104,8 @@ describe.runIf(sandboxAvailable)(
       // Outside /tmp, which the sandbox replaces, so the directory exists there.
       const outside = await mkdtemp(path.join(homedir(), ".sandbox-out-"));
       try {
-        const write = 'echo x > "$1"';
+        // The runner appends the file name, so the command ends with `>`.
+        const write = "echo x >";
         const inside = path.join(workspace, "file.txt");
         expect((await runner.run(write, [inside])).ok).toBe(true);
         expect(await readFile(inside, "utf8")).toBe("x\n");
