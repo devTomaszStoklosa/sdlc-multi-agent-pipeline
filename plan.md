@@ -208,7 +208,7 @@ W repozytorium publicznym każdy może założyć issue i dodać komentarz, a lo
 
 ## 5. Przyrosty MVP
 
-Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-opis>` i jeden PR. Przyrosty są realizowane po kolei, bo każdy zależy od poprzedniego. Ticket powstaje w chwili rozpoczęcia przyrostu.
+Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-opis>` i jeden PR. Przyrosty są realizowane pojedynczo. Przyrost zaczyna się dopiero wtedy, gdy ukończone są wszystkie przyrosty z jego pola „Zależy od”, więc P3, który zależy tylko od P0, można zrealizować przed P1 i P2. Ticket powstaje w chwili rozpoczęcia przyrostu.
 
 ### P0. Szkielet repozytorium pipeline'u
 
