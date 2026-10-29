@@ -1,0 +1,306 @@
+name: Orchestrate
+
+# The orchestrator of a run (plan 3.5), called from the demo repository on
+# issue labels, issue comments, finished gates and manual dispatches. The
+# filter job drops events of bots and strangers before the concurrency group,
+# so they neither wait in the run's queue nor cancel the events waiting there.
+# Only the decide job is in the group: a role job outside it does not block
+# the events of the run for up to 45 minutes (plan 2.2). A workflow run starts
+# at most two roles, because after the Planner and after `changes_requested`
+# the Developer follows without any GitHub event.
+#
+# No job has the Claude Code token: the roles of P4 are stubs. Each job that
+# writes gets a GitHub App token narrowed to its scope in src/orchestrator/scopes.ts,
+# and every scope there names a permission, because a token request without
+# any permission input inherits all permissions of the app.
+on:
+  workflow_call:
+    inputs:
+      pipeline-ref:
+        description: Commit of this repository whose code the jobs run.
+        required: true
+        type: string
+      app-client-id:
+        description: Client ID of the pipeline's GitHub App.
+        required: true
+        type: string
+      app-id:
+        description: ID of the pipeline's GitHub App, the author of the state comment.
+        required: true
+        type: string
+      gates-workflow:
+        description: Name of the calling repository's gates workflow.
+        required: false
+        type: string
+        default: Gates
+    secrets:
+      APP_PRIVATE_KEY:
+        description: Private key of the pipeline's GitHub App.
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  SDLC_APP_ID: ${{ inputs.app-id }}
+  SDLC_GATES_WORKFLOW: ${{ inputs.gates-workflow }}
+
+jobs:
+  filter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      proceed: ${{ steps.filter.outputs.proceed }}
+      issue: ${{ steps.filter.outputs.issue }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: filter
+        run: npm run --silent --prefix pipeline orchestrator -- filter
+
+  decide:
+    needs: filter
+    if: needs.filter.outputs.proceed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: sdlc-run-${{ needs.filter.outputs.issue }}
+      cancel-in-progress: false
+    # The workflow token only reads: labels and pull requests for the checks
+    # of FR-4.28c, workflow runs for a manual dispatch.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    outputs:
+      role: ${{ steps.decide.outputs.role }}
+    env:
+      ISSUE: ${{ needs.filter.outputs.issue }}
+      SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/decide.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: scope
+        run: npm run --silent --prefix pipeline orchestrator -- scopes --role orchestrator
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: ${{ steps.scope.outputs.contents }}
+          permission-issues: ${{ steps.scope.outputs.issues }}
+          permission-pull-requests: ${{ steps.scope.outputs.pull-requests }}
+          permission-checks: ${{ steps.scope.outputs.checks }}
+      - id: decide
+        env:
+          SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+          SDLC_READ_TOKEN: ${{ github.token }}
+        run: npm run --silent --prefix pipeline orchestrator -- decide --issue "$ISSUE"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: run-events-decide-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/run-events
+          if-no-files-found: ignore
+
+  role:
+    needs: [filter, decide]
+    if: needs.decide.outputs.role != ''
+    runs-on: ubuntu-24.04
+    # The stage itself ends with the run's time limit (NFR-11.5); this is
+    # the limit of the job around it.
+    timeout-minutes: 50
+    environment: agents
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      output: ${{ steps.role.outputs.output }}
+    env:
+      ISSUE: ${{ needs.filter.outputs.issue }}
+      ROLE: ${{ needs.decide.outputs.role }}
+      SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: scope
+        run: npm run --silent --prefix pipeline orchestrator -- scopes --role "$ROLE"
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: ${{ steps.scope.outputs.contents }}
+          permission-issues: ${{ steps.scope.outputs.issues }}
+          permission-pull-requests: ${{ steps.scope.outputs.pull-requests }}
+          permission-checks: ${{ steps.scope.outputs.checks }}
+      - id: role
+        env:
+          SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+          SDLC_READ_TOKEN: ${{ github.token }}
+        run: npm run --silent --prefix pipeline orchestrator -- role --issue "$ISSUE" --role "$ROLE"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: run-events-role-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/run-events
+          if-no-files-found: ignore
+
+  # Runs also when the role job failed, which counts as an infrastructure
+  # error of the stage, but not when a stop cancelled the workflow run.
+  advance:
+    needs: [filter, decide, role]
+    if: ${{ !cancelled() && needs.decide.outputs.role != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      role: ${{ steps.advance.outputs.role }}
+    env:
+      ISSUE: ${{ needs.filter.outputs.issue }}
+      SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: scope
+        run: npm run --silent --prefix pipeline orchestrator -- scopes --role orchestrator
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: ${{ steps.scope.outputs.contents }}
+          permission-issues: ${{ steps.scope.outputs.issues }}
+          permission-pull-requests: ${{ steps.scope.outputs.pull-requests }}
+          permission-checks: ${{ steps.scope.outputs.checks }}
+      - id: advance
+        env:
+          SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+          SDLC_READ_TOKEN: ${{ github.token }}
+          SDLC_ROLE_OUTPUT: ${{ needs.role.outputs.output }}
+        run: npm run --silent --prefix pipeline orchestrator -- advance --issue "$ISSUE"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: run-events-advance-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/run-events
+          if-no-files-found: ignore
+
+  role-2:
+    needs: [filter, advance]
+    if: needs.advance.outputs.role != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    environment: agents
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      output: ${{ steps.role.outputs.output }}
+    env:
+      ISSUE: ${{ needs.filter.outputs.issue }}
+      ROLE: ${{ needs.advance.outputs.role }}
+      SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role-2.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: scope
+        run: npm run --silent --prefix pipeline orchestrator -- scopes --role "$ROLE"
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: ${{ steps.scope.outputs.contents }}
+          permission-issues: ${{ steps.scope.outputs.issues }}
+          permission-pull-requests: ${{ steps.scope.outputs.pull-requests }}
+          permission-checks: ${{ steps.scope.outputs.checks }}
+      - id: role
+        env:
+          SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+          SDLC_READ_TOKEN: ${{ github.token }}
+        run: npm run --silent --prefix pipeline orchestrator -- role --issue "$ISSUE" --role "$ROLE"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: run-events-role-2-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/run-events
+          if-no-files-found: ignore
+
+  advance-2:
+    needs: [filter, advance, role-2]
+    if: ${{ !cancelled() && needs.advance.outputs.role != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      ISSUE: ${{ needs.filter.outputs.issue }}
+      SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance-2.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: scope
+        run: npm run --silent --prefix pipeline orchestrator -- scopes --role orchestrator
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: ${{ steps.scope.outputs.contents }}
+          permission-issues: ${{ steps.scope.outputs.issues }}
+          permission-pull-requests: ${{ steps.scope.outputs.pull-requests }}
+          permission-checks: ${{ steps.scope.outputs.checks }}
+      # A third role would need a third job; the Developer never hands over
+      # without a GitHub event, so the advance job only records it.
+      - env:
+          SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+          SDLC_READ_TOKEN: ${{ github.token }}
+          SDLC_ROLE_OUTPUT: ${{ needs.role-2.outputs.output }}
+        run: npm run --silent --prefix pipeline orchestrator -- advance --issue "$ISSUE"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: run-events-advance-2-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/run-events
+          if-no-files-found: ignore

@@ -17,6 +17,7 @@
     "validate-config": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/config/cli.ts",
     "prepare-session": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/agents/prepare-session.ts",
     "session-summary": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/agents/session-summary-cli.ts",
+    "orchestrator": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/orchestrator/cli.ts",
     "prepare": "lefthook install"
   },
   "devDependencies": {
@@ -36,6 +37,7 @@
     "vitest": "5.0.4"
   },
   "dependencies": {
+    "@octokit/rest": "22.0.1",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   }

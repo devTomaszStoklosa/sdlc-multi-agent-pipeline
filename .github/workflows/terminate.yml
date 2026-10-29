@@ -1,0 +1,141 @@
+name: Terminate
+
+# The end of a run (plan 2.2, 3.5), called from the demo repository's
+# stop.yml on `agent:stop` added to an issue or a pull request (FR-4.28) and
+# from its pr-closed.yml on a closed or merged pull request (FR-4.35). Both
+# share this workflow because they share the code: cancel the run's workflow
+# run, write the final state, remove the labels and cancel `agent-review`.
+#
+# The cancel job is outside any concurrency group, so a stop never waits for a
+# role job or behind other events (SEC-8.9), and it is the only job with a
+# workflow token that may cancel runs. The finalize job waits for the
+# cancelled run to complete and runs in a group per issue, so two terminal
+# events of one run write its final state one after the other and only the
+# first one changes it. Neither job reads .sdlc-agents.yml (FR-10.4).
+on:
+  workflow_call:
+    inputs:
+      pipeline-ref:
+        description: Commit of this repository whose code the jobs run.
+        required: true
+        type: string
+      app-client-id:
+        description: Client ID of the pipeline's GitHub App.
+        required: true
+        type: string
+      app-id:
+        description: ID of the pipeline's GitHub App, the author of the state comment.
+        required: true
+        type: string
+    secrets:
+      APP_PRIVATE_KEY:
+        description: Private key of the pipeline's GitHub App.
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  SDLC_APP_ID: ${{ inputs.app-id }}
+
+jobs:
+  cancel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      proceed: ${{ steps.target.outputs.proceed }}
+      issue: ${{ steps.target.outputs.issue }}
+      target: ${{ steps.target.outputs.target }}
+      cancelled: ${{ steps.cancel.outputs.cancelled }}
+    env:
+      SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/cancel.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: target
+        run: npm run --silent --prefix pipeline orchestrator -- target
+      - id: cancel
+        if: steps.target.outputs.proceed == 'true'
+        env:
+          SDLC_ACTIONS_TOKEN: ${{ github.token }}
+          SDLC_TARGET: ${{ steps.target.outputs.target }}
+        run: npm run --silent --prefix pipeline orchestrator -- cancel
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: run-events-cancel-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/run-events
+          if-no-files-found: ignore
+
+  finalize:
+    needs: cancel
+    if: needs.cancel.outputs.proceed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: sdlc-terminal-${{ needs.cancel.outputs.issue }}
+      cancel-in-progress: false
+    # The workflow token reads the cancelled run and its artifacts.
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      SDLC_TARGET: ${{ needs.cancel.outputs.target }}
+      SDLC_CANCELLED: ${{ needs.cancel.outputs.cancelled }}
+      SDLC_READ_TOKEN: ${{ github.token }}
+      SDLC_ARTIFACTS_DIR: ${{ github.workspace }}/cancelled-run
+      SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/finalize.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      # The cancelled run uploads its event log while it ends, so the summary
+      # reads it only after the run completed (FR-4.28f).
+      - name: Wait for the cancelled run
+        if: needs.cancel.outputs.cancelled != ''
+        run: npm run --silent --prefix pipeline orchestrator -- wait-run
+      - name: Download the cancelled run's events
+        if: needs.cancel.outputs.cancelled != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          run-id: ${{ needs.cancel.outputs.cancelled }}
+          github-token: ${{ github.token }}
+          pattern: run-events-*
+          path: ${{ github.workspace }}/cancelled-run
+      - id: scope
+        run: npm run --silent --prefix pipeline orchestrator -- scopes --role terminate
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: ${{ steps.scope.outputs.contents }}
+          permission-issues: ${{ steps.scope.outputs.issues }}
+          permission-pull-requests: ${{ steps.scope.outputs.pull-requests }}
+          permission-checks: ${{ steps.scope.outputs.checks }}
+      - env:
+          SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+        run: npm run --silent --prefix pipeline orchestrator -- finalize
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: run-events-finalize-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/run-events
+          if-no-files-found: ignore

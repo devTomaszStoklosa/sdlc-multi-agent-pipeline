@@ -1,0 +1,17 @@
+name: Pipeline setup
+description: >-
+  Node.js and the runtime dependencies of the pipeline, checked out into the
+  `pipeline` directory of the workspace. Development dependencies and install
+  scripts stay out, so the orchestrator jobs start fast (NFR-4.28d).
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: pipeline/.nvmrc
+        cache: npm
+        cache-dependency-path: pipeline/package-lock.json
+
+    - run: npm ci --prefix pipeline --omit=dev --ignore-scripts --no-audit --no-fund
+      shell: bash
