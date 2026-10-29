@@ -83,7 +83,11 @@ describe("resolvePolicy", () => {
   });
 
   it("accepts values equal to the baseline", () => {
-    const repo = repoConfigSchema.parse({ ...MINIMAL_CONFIG, ...BASELINE });
+    // The network section is baseline-only, so a repository cannot repeat it.
+    const policy = Object.fromEntries(
+      Object.entries(BASELINE).filter(([section]) => section !== "network"),
+    );
+    const repo = repoConfigSchema.parse({ ...MINIMAL_CONFIG, ...policy });
     const { effective, loosenings } = resolvePolicy(repo, BASELINE);
     expect(loosenings).toEqual([]);
     expect(effective).toMatchObject(BASELINE);
@@ -99,16 +103,30 @@ describe("resolvePolicy", () => {
     });
   });
 
-  it("adds repository paths to the baseline lists without duplicates", () => {
+  it("adds repository entries to the baseline lists without duplicates", () => {
     const repo = repoConfigSchema.parse({
       ...MINIMAL_CONFIG,
       high_impact: { extra_paths: ["src/auth/**"] },
-      hooks: { deny_paths: ["infra/prod/**", ".github/**"] },
+      hooks: {
+        deny_paths: ["infra/prod/**", ".github/**"],
+        secret_paths: ["**/*.secret"],
+        destructive_commands: ["^terraform destroy\\b"],
+      },
     });
     const { effective, loosenings } = resolvePolicy(repo, BASELINE);
     expect(loosenings).toEqual([]);
     expect(effective.high_impact.extra_paths).toEqual(["src/auth/**"]);
-    expect(effective.hooks.deny_paths).toEqual([".github/**", "infra/prod/**"]);
+    expect(effective.hooks).toEqual({
+      deny_paths: [".github/**", "infra/prod/**"],
+      secret_paths: ["**/.env", "**/*.secret"],
+      destructive_commands: ["^dropdb\\b", "^terraform destroy\\b"],
+    });
+  });
+
+  it("takes the network hosts from the baseline alone (FR-10.2)", () => {
+    const repo = repoConfigSchema.parse(MINIMAL_CONFIG);
+    const { effective } = resolvePolicy(repo, BASELINE);
+    expect(effective.network).toEqual(BASELINE.network);
   });
 });
 

@@ -7,7 +7,7 @@ Specyfikacja pipeline'u, w którym wyspecjalizowani agenci AI przejmują GitHub 
 - [intent.md](intent.md): intencja, czyli problem, oczekiwany rezultat, ograniczenia i pytania otwarte.
 - [spec.md](spec.md): specyfikacja, czyli przebieg i maszyna stanów, agenci, bramki, bezpieczeństwo, hooki, konfiguracja repozytorium, ewaluacje, porównanie frameworków, metryki i rollout.
 - [plan.md](plan.md): plan techniczny MVP, czyli decyzje przy warunku zera kosztów, architektura, ochrona tokenu subskrypcji, przyrosty P0–P8, fazy po MVP i śledzenie wymagań.
-- [config/org-baseline.yml](config/org-baseline.yml): bazowy zestaw organizacji, czyli najłagodniejsze dopuszczalne wartości `.sdlc-agents.yml`, które repozytorium może tylko zaostrzyć (FR-10.2).
+- [config/org-baseline.yml](config/org-baseline.yml): bazowy zestaw organizacji, czyli najłagodniejsze dopuszczalne wartości `.sdlc-agents.yml`, które repozytorium może tylko zaostrzyć (FR-10.2), oraz lista hostów sieciowych, której repozytorium nie zmienia.
 
 ## Najważniejsze założenia
 
@@ -46,6 +46,24 @@ Skrypty:
 - `npm run duplication`: jscpd z progiem 3%;
 - `npm test`: Vitest;
 - `npm run validate-config -- <ścieżka>`: walidacja `.sdlc-agents.yml` schematem i bazowym zestawem organizacji. Kod wyjścia 0 oznacza poprawną konfigurację, 1 niepoprawną, a 2 błąd użycia lub odczytu. Ścieżka jest względna wobec katalogu tego repozytorium. Skrypt uruchamia TypeScript bez kroku budowania, przez usuwanie typów w Node 22, więc kod pipeline'u nie używa składni, która wymaga transpilacji (`erasableSyntaxOnly` w `tsconfig.json`).
+- `npm run prepare-session -- --role <rola> --workspace <katalog> --config <.sdlc-agents.yml> --out <katalog>`: zapisuje kontekst hooków i ustawienia Claude Code dla sesji agenta (rozdz. 3.4 planu). Katalog wyjściowy musi leżeć poza przestrzenią roboczą. Sesja powinna mieć `CLAUDE_CONFIG_DIR` w tym samym katalogu, a nie w katalogu domowym. Kody wyjścia jak w `validate-config`.
+- `npm run session-summary -- --result <wynik.json> --audit <log.jsonl>`: podsumowanie sesji w Markdown bez transkryptu, z redakcją sekretów.
+
+## Hooki agentów
+
+Hooki z rozdz. 9.2 specyfikacji są w [src/hooks](src/hooks). Claude Code uruchamia je poleceniem `node --experimental-strip-types src/hooks/cli.ts <zdarzenie> --context <hook-context.json>`, a zdarzenie podaje na wejściu standardowym.
+
+- `PreToolUse`: każda reguła to osobna polityka w [src/hooks/policies](src/hooks/policies). Blokada kończy hook kodem 2 i trafia do logu audytowego z kategorią z M-E01. Hook nigdy nie odpowiada „allow”, więc reguły uprawnień Claude Code nadal działają.
+- `PostToolUse`: redakcja sekretów w wyniku narzędzia, formatter i linter na zapisanym pliku, log audytowy wywołań w JSONL.
+- `PostToolUseFailure`: log audytowy wywołań, które się nie powiodły.
+- `Stop`: Developer nie kończy pracy, dopóki nie przechodzą `commands.lint` i `commands.test`.
+- Każdy błąd, niepoprawne wejście albo przekroczenie czasu blokuje akcję albo wstrzymuje wynik narzędzia. Proces, który nie wystartuje, blokuje akcję dzięki ustawieniu `onFailure: "block"`.
+
+Polecenia projektu (formatter, linter, testy) hooki uruchamiają w [bubblewrap](https://github.com/containers/bubblewrap) bez sieci, bez widoku innych procesów i z zapisem tylko w przestrzeni roboczej, bo te polecenia wykonują kod zmieniany przez agenta (rozdz. 3.4 planu). Testy tej izolacji działają tylko na Linuksie z `bwrap`. Lokalnie są pomijane, a w CI (`REQUIRE_SANDBOX=1`) nie mogą być pominięte.
+
+Analiza poleceń powłoki to heurystyka: nie widzi zawartości uruchamianych skryptów ani nazw plików powstałych z rozwinięcia wzorców. Drugą warstwą jest sandbox Claude Code (SEC-9.0c).
+
+Próbną sesję na runnerze uruchamia reusable workflow [agent-trial.yml](.github/workflows/agent-trial.yml), wywoływany z ręcznego workflow na `main` repozytorium demo.
 
 ## Autor
 

@@ -147,6 +147,16 @@ describe("parseRepoConfig", () => {
       "hooks.deny_paths.0",
     ],
     [
+      "a negated secret path",
+      configText({ hooks: { secret_paths: ["!.env.example"] } }),
+      "hooks.secret_paths.0",
+    ],
+    [
+      "an invalid destructive command pattern",
+      configText({ hooks: { destructive_commands: ["(rm"] } }),
+      "hooks.destructive_commands.0: Invalid regular expression",
+    ],
+    [
       "a negated high-impact path",
       configText({ high_impact: { extra_paths: ["!src/**"] } }),
       "high_impact.extra_paths.0",
@@ -202,6 +212,16 @@ describe("parseOrgBaseline", () => {
     });
     expect(result.value.limits.max_minutes_per_run).toBe(45);
     expect(result.value.hooks.deny_paths).toContain(".github/**");
+    expect(result.value.hooks.secret_paths).toContain("**/.env");
+    expect(result.value.network.allowed_hosts).toEqual(["registry.npmjs.org"]);
+  });
+
+  it("rejects an invalid host name", () => {
+    const network = { allowed_hosts: ["https://example.com"] };
+    const result = parseOrgBaseline(stringify({ ...BASELINE, network }));
+    expect(result.ok ? "" : result.errors.join("\n")).toContain(
+      "network.allowed_hosts.0: Invalid host name",
+    );
   });
 
   it("rejects a baseline without a policy field", () => {

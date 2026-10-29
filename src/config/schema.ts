@@ -19,6 +19,25 @@ const pathPattern = z
     message: "Negated path patterns are not allowed",
   });
 
+function compiles(source: string): boolean {
+  try {
+    new RegExp(source, "i");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Hooks match command patterns case-insensitively against each shell command.
+const commandPattern = z
+  .string()
+  .min(1)
+  .refine(compiles, { message: "Invalid regular expression" });
+
+const hostName = z
+  .string()
+  .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/, { message: "Invalid host name" });
+
 // Policy sections. The baseline sets every field; a repository may only tighten them.
 const reviewPolicy = z.strictObject({ max_rounds: count(1) });
 
@@ -44,8 +63,14 @@ const limitsPolicy = z.strictObject({
   max_turns_per_stage: count(1),
 });
 
-// Network hosts are not here: only the baseline may allow new ones (FR-10.2).
-const hooksPolicy = z.strictObject({ deny_paths: z.array(pathPattern) });
+const hooksPolicy = z.strictObject({
+  deny_paths: z.array(pathPattern),
+  secret_paths: z.array(pathPattern),
+  destructive_commands: z.array(commandPattern),
+});
+
+// Only the baseline lists network hosts: a repository may not allow new ones (FR-10.2).
+const networkPolicy = z.strictObject({ allowed_hosts: z.array(hostName) });
 
 export const orgBaselineSchema = z.strictObject({
   version: z.literal(1),
@@ -54,6 +79,7 @@ export const orgBaselineSchema = z.strictObject({
   high_impact: highImpactPolicy,
   limits: limitsPolicy,
   hooks: hooksPolicy,
+  network: networkPolicy,
 });
 
 const commands = z.strictObject({
@@ -113,4 +139,5 @@ export const repoConfigSchema = z.strictObject({
 
 export type OrgBaseline = z.infer<typeof orgBaselineSchema>;
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
-export type PolicySection = Exclude<keyof OrgBaseline, "version">;
+// Sections a repository may tighten. The network section comes from the baseline alone.
+export type PolicySection = Exclude<keyof OrgBaseline, "version" | "network">;
