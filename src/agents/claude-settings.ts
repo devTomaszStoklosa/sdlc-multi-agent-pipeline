@@ -11,9 +11,12 @@ export interface SettingsOptions {
 // the pipeline hooks, and a hook that cannot start or times out blocks the
 // action (SEC-9.0a). Shell commands run in the sandbox, which limits writes to
 // the workspace and connections to the allowed hosts, and hides the token from
-// them (SEC-9.0c, SEC-8.4). The sandbox also denies writes to the home
-// directory, where tools keep configuration that runs code later. The session
-// must load no project settings, so a repository cannot weaken these ones.
+// them (SEC-9.0c, SEC-8.4). The sandbox also denies writes to the
+// configuration that tools in the home directory read later and that can run
+// code, such as Claude Code's own settings. It cannot deny the whole home
+// directory, because the sandbox creates its own guards for shell startup
+// files there. The session must load no project settings, so a repository
+// cannot weaken these ones.
 export function claudeSettings(options: SettingsOptions): object {
   const [program, ...programArgs] = options.hookCommand;
   const hooks = Object.fromEntries(
@@ -43,7 +46,7 @@ export function claudeSettings(options: SettingsOptions): object {
       failIfUnavailable: true,
       allowUnsandboxedCommands: false,
       network: { allowedDomains: [...options.allowedHosts] },
-      filesystem: { denyWrite: ["~"] },
+      filesystem: { denyWrite: ["~/.claude", "~/.config", "~/.npmrc"] },
       credentials: {
         envVars: [{ name: "CLAUDE_CODE_OAUTH_TOKEN", mode: "deny" }],
       },
