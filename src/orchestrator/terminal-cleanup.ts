@@ -2,7 +2,7 @@ import { workingMinutes } from "../core/state-machine/working-time.ts";
 import { isWorking } from "../core/state-machine/states.ts";
 import { costUsd, runLimits, type RunLimits } from "./limits.ts";
 import { AGENT_REVIEW } from "./role-effects.ts";
-import { stopSummary } from "./stop-summary.ts";
+import { stopSummary, type EndedSession } from "./stop-summary.ts";
 import {
   logTerminal,
   type Ended,
@@ -48,6 +48,24 @@ async function reviewChecks(
   return [...new Set(ids.flat())];
 }
 
+// The role session that the stop ended: the role job ends it itself when its
+// watch sees the stop, otherwise the cancellation of the workflow run does.
+function endedSession(
+  context: FinalizeContext,
+  facts: CleanupFacts,
+): EndedSession | undefined {
+  const { run } = facts.ended.record;
+  const role = run.workflowRun.role;
+  if (role === undefined || !isWorking(facts.ended.before)) return undefined;
+  const watched = context.events.some(
+    (event) => event.type === "stop-detected" && event.run === run.id,
+  );
+  if (watched) return { role, endedBy: "watch" };
+  return facts.cancelled === undefined
+    ? undefined
+    : { role, endedBy: "cancel" };
+}
+
 async function publishSummary(
   context: FinalizeContext,
   target: TerminalTarget,
@@ -65,10 +83,7 @@ async function publishSummary(
     where: target.where,
     labeledAt: ended.labeledAt,
     pullUrl: pull?.url,
-    cancelledRole:
-      facts.cancelled !== undefined && isWorking(ended.before)
-        ? run.workflowRun.role
-        : undefined,
+    session: endedSession(context, facts),
     finishedAfterStop: facts.finished,
     cancelledChecks: checks,
     usedMinutes: workingMinutes(run.history, context.now()),

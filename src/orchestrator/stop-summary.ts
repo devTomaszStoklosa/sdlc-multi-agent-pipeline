@@ -11,8 +11,8 @@ export interface StopFacts {
   where: "issue" | "pr";
   labeledAt: string;
   pullUrl?: string;
-  // The role whose job the stop cancelled, if one was running.
-  cancelledRole?: string;
+  // The role session that was running, if any, and what ended it.
+  session?: EndedSession;
   // Side effects that had passed their check before the stop and finished
   // after it (FR-4.28c).
   finishedAfterStop: string[];
@@ -22,15 +22,25 @@ export interface StopFacts {
   limits: RunLimits | undefined;
 }
 
+export interface EndedSession {
+  role: string;
+  endedBy: "watch" | "cancel";
+}
+
+function sessionText(session: EndedSession | undefined): string {
+  if (session === undefined) return "brak trwającej sesji agenta";
+  return session.endedBy === "watch"
+    ? `sesja roli ${session.role} przerwana przez job roli po wykryciu zatrzymania`
+    : `sesja roli ${session.role} zakończona przez anulowanie runu`;
+}
+
 function line(label: string, value: string): string {
   return `- **${label}:** ${value}`;
 }
 
 function interrupted(facts: StopFacts): string[] {
   const items = [
-    facts.cancelledRole
-      ? `sesja roli ${facts.cancelledRole} zakończona przez anulowanie runu`
-      : "brak trwającej sesji agenta",
+    sessionText(facts.session),
     facts.cancelledChecks > 0
       ? `check run \`agent-review\` zakończony wynikiem \`cancelled\` (${String(facts.cancelledChecks)})`
       : "brak check runa `agent-review` w toku",

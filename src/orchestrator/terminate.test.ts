@@ -242,6 +242,23 @@ describe("a stop", () => {
     expect(summaries(repo)[0]).toContain("dokończone po zatrzymaniu: push");
   });
 
+  it.each([
+    [true, "sesja roli developer przerwana przez job roli"],
+    [false, "sesja roli developer zakończona przez anulowanie runu"],
+  ])("names how the session ended, watched: %s", async (watched, text) => {
+    const repo = await runIn("developing");
+    if (watched) {
+      repo.log.records.push({
+        time: "2026-10-29T10:00:05Z",
+        type: "stop-detected",
+        issue: 1,
+        run: "1-1",
+      });
+    }
+    await stop(repo, "issue");
+    expect(summaries(repo)[0]).toContain(text);
+  });
+
   it("force-cancels a workflow run that ignores the cancellation", async () => {
     const repo = await runIn("developing");
     repo.github.onCancel = () => undefined;
