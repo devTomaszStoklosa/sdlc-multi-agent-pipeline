@@ -78,7 +78,7 @@ MVP nie może generować żadnych opłat poza istniejącą subskrypcją Claude P
 |---|---|---|---|
 | Środowisko agentów (spec 13.4) | Claude Code CLI w trybie headless, wersja przypięta. Każda rola stoi za adapterem (spec 13.4 pkt 3), więc środowisko da się wymienić. | Zero kosztów przy tokenie subskrypcji; wbudowane narzędzia do kodowania i hooki zgodne ze spec 9.2. | Claude Agent SDK z kluczem API (płatny); Claude Managed Agents (płatne, beta); darmowe poziomy innych dostawców i modele lokalne (zmiana frameworka, niskie limity, słaba jakość). |
 | Spike frameworków (spec 13.4 pkt 4) | Zastąpiony powyższą decyzją. Spike można wykonać w F4 na zestawie ewaluacji. | Warunek zera kosztów wyklucza pozostałych kandydatów w MVP. | Spike trzech kandydatów w fazie 0. |
-| Modele (OQ-10, FR-5.5) | Planner i Developer: `claude-sonnet-5-5`. Reviewer: `claude-opus-5-5`, jeśli plan Pro udostępnia go w Claude Code, w przeciwnym razie `claude-haiku-5-5`. Model ustawiany per rola w konfiguracji. | Reviewer na innym modelu niż Developer. Review czyta diff, więc zużywa mniej limitu niż implementacja i stać go na mocniejszy model. | Jeden model dla wszystkich ról; Reviewer u innego dostawcy. |
+| Modele (OQ-10, FR-5.5, FR-5.8) | Planner i Developer: `claude-sonnet-5-5`. Reviewer: `claude-opus-5-5`, jeśli plan Pro udostępnia go w Claude Code, w przeciwnym razie `claude-haiku-5-5`. Model każdej roli jest w pliku `prompts/roles.yml` w tym repozytorium, wersjonowanym razem z promptami (FR-5.8). Repozytorium demo nie wybiera modelu. | Reviewer na innym modelu niż Developer. Review czyta diff, więc zużywa mniej limitu niż implementacja i stać go na mocniejszy model. Model zmienia się tylko przez PR w tym repozytorium, więc repozytorium demo nie ustawi Reviewerowi modelu Developera (FR-5.5), a od F4 zmianę modelu obejmuje ta sama bramka ewaluacji co zmianę promptu (QG-12.4). | Jeden model dla wszystkich ról; Reviewer u innego dostawcy; model w `.sdlc-agents.yml` (repozytorium ustawi Reviewerowi model Developera i zmieni model bez ewaluacji, chyba że baza organizacji dostanie listę dozwolonych modeli); `config/roles.yml` (w `config/` są wartości, które repozytorium może tylko zaostrzyć, a model do nich nie należy; przy promptach jedna ścieżka obejmuje oba pliki bramką ewaluacji); stałe w kodzie modułu `agents` (zmiana modelu ginie wśród zmian kodu). |
 | Dane (OQ-7) | Kod i treść issue trafiają do Anthropic w ramach subskrypcji konsumenckiej. O użyciu do trenowania decyduje ustawienie prywatności konta autora. | Repozytorium demo jest publiczne, więc ryzyko ujawnienia jest niskie. | — |
 | Repozytorium pilotażowe (OQ-1) | Nowe, publiczne repozytorium `sdlc-pipeline-sandbox` z małą aplikacją TypeScript. | Bezpieczne, przewidywalne, widoczne w portfolio, darmowe CI. | To repozytorium (każda zmiana pipeline'u jest high-impact); prawdziwy projekt (za wcześnie). |
 | Orchestrator (FR-5.6) | Reusable workflows w tym repozytorium, wywoływane z repozytorium demo. Sterowanie jest deterministycznym kodem TypeScript; w MVP Orchestrator nie wywołuje modelu. | Brak serwera do utrzymania; zdarzenia GitHuba bez publicznego endpointu. | Własny serwer webhooków z bazą danych (hosting i koszt od pierwszego dnia). |
@@ -99,7 +99,7 @@ MVP nie może generować żadnych opłat poza istniejącą subskrypcją Claude P
 
 ### 3.1 Repozytoria
 
-- **`sdlc-multi-agent-pipeline`** (to repozytorium, publiczne): kod pipeline'u w TypeScript, reusable workflows, bazowy zestaw organizacji `config/org-baseline.yml`, prompty ról w `prompts/`, ustawienia Claude Code z hookami. Nie przechowuje tokenu Claude i nie uruchamia agentów.
+- **`sdlc-multi-agent-pipeline`** (to repozytorium, publiczne): kod pipeline'u w TypeScript, reusable workflows, bazowy zestaw organizacji `config/org-baseline.yml`, prompty ról i ich modele w `prompts/`, ustawienia Claude Code z hookami. Nie przechowuje tokenu Claude i nie uruchamia agentów.
 - **`sdlc-pipeline-sandbox`** (nowe, publiczne): mała aplikacja TypeScript z testami, `.sdlc-agents.yml`, workflow bramek, hooki gita, cienkie workflow wywołujące reusable workflows pipeline'u z przypiętym tagiem.
 
 Kod pipeline'u podlega tym samym zasadom co kod tworzony przez agentów (spec 7.3): SOLID, DRY, KISS, YAGNI i prawo Demeter, sprawdzane progami złożoności i duplikacji oraz w review.
@@ -121,7 +121,7 @@ Dzięki temu zakazy z SEC-9.2, SEC-9.6, SEC-9.7 i SEC-9.8 są wymuszone struktur
 | `config` | Schemat `.sdlc-agents.yml` (zod), scalanie z bazą organizacji tylko w stronę zaostrzenia, także dla kopii zapisanej przy starcie przebiegu | FR-10.1, FR-10.2, FR-10.5 |
 | `github` | Klient Octokit, sprawdzanie uprawnień autora zdarzenia (triage, zapis, bot), etykiety, PR, check runy | FR-4.1, FR-4.23, FR-4.33, SEC-8.6, SEC-8.7 |
 | `hooks` | Każda reguła jako osobna polityka za wspólnym interfejsem, opakowanie fail-closed, zestaw bazowy plus zaostrzenia repozytorium | SEC-9.0a, SEC-9.0b, spec 9.2 |
-| `agents` | Adapter roli (ustrukturyzowane wejście i wyjście), implementacja na Claude Code CLI, role Planner, Developer i Reviewer | FR-5.1, FR-5.8 |
+| `agents` | Adapter roli (ustrukturyzowane wejście i wyjście), implementacja na Claude Code CLI, role Planner, Developer i Reviewer, model roli z `prompts/roles.yml` | FR-5.1, FR-5.5, FR-5.8 |
 | `gates/scope` | Deterministyczna bramka zakresu uruchamiana w CI repozytorium demo | QG-7.9 |
 | `audit` | Zdarzenia jako JSONL, zużycie tokenów i szacunek kosztu z wyniku CLI, liczniki limitów | NFR-11.3, NFR-11.4, NFR-11.5 |
 
@@ -131,13 +131,13 @@ Nowe zachowanie (kolejna rola, kolejna polityka hooka, kolejny magazyn stanu) do
 
 Każda rola działa w osobnym jobie, z osobnym tokenem App i osobną sesją (FR-5.1). Job uruchamia `claude -p` z:
 
-- modelem roli (`--model`);
+- modelem roli z `prompts/roles.yml` (`--model`);
 - listą dozwolonych narzędzi (Planner i Reviewer: tylko odczyt i wyszukiwanie; Developer: odczyt, edycja, zapis i polecenia powłoki ograniczone hookami);
 - limitem tur (`--max-turns`);
 - wynikiem w JSON, który zawiera też zużycie tokenów i szacunek kosztu;
 - plikiem ustawień z hookami `PreToolUse`, `PostToolUse` i `Stop`. Hooki to skrypty Node zbudowane z kodu TypeScript pipeline'u, które czytają zdarzenie z wejścia standardowego.
 
-Prompty ról są wersjonowane w `prompts/` (FR-5.8). Dokładne flagi CLI zostaną potwierdzone w P2 (rozdz. 12).
+Prompty ról i ich modele są wersjonowane w `prompts/` (FR-5.8). Dokładne flagi CLI zostaną potwierdzone w P2 (rozdz. 12).
 
 ### 3.5 Przepływ zdarzeń
 
@@ -249,23 +249,23 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 ### P5. Planner
 
-- **Zakres:** prompt Plannera, komentarz z planem i blokiem `sdlc-plan` w YAML (lista plików z jednym zdaniem uzasadnienia przy każdym), klasyfikacja high-impact jako suma reguł deterministycznych (ścieżki z konfiguracji, manifesty zależności, pliki CI, `.sdlc-agents.yml`, limity rozmiaru) i oceny modelu (bezpieczeństwo, publiczne API). Suma, bo przeoczenie zmiany high-impact jest droższe niż fałszywy alarm (spec 12.2). Każda wersja planu jako osobny komentarz z numerem. Akceptacja etykietą `plan:approved` dodaną w `awaiting-plan-approval`, z numerem zaakceptowanej wersji w komentarzu ze stanem, zdejmowanie `plan:approved` przed publikacją każdej wersji wymagającej akceptacji i poprawki po komentarzu człowieka. W nowym przebiegu po zatrzymaniu Planner dostaje poprzednie plany, podsumowanie zatrzymania, nowe komentarze i diff brancha.
+- **Zakres:** prompt Plannera, plik `prompts/roles.yml` z modelem Plannera, komentarz z planem i blokiem `sdlc-plan` w YAML (lista plików z jednym zdaniem uzasadnienia przy każdym), klasyfikacja high-impact jako suma reguł deterministycznych (ścieżki z konfiguracji, manifesty zależności, pliki CI, `.sdlc-agents.yml`, limity rozmiaru) i oceny modelu (bezpieczeństwo, publiczne API). Suma, bo przeoczenie zmiany high-impact jest droższe niż fałszywy alarm (spec 12.2). Każda wersja planu jako osobny komentarz z numerem. Akceptacja etykietą `plan:approved` dodaną w `awaiting-plan-approval`, z numerem zaakceptowanej wersji w komentarzu ze stanem, zdejmowanie `plan:approved` przed publikacją każdej wersji wymagającej akceptacji i poprawki po komentarzu człowieka. W nowym przebiegu po zatrzymaniu Planner dostaje poprzednie plany, podsumowanie zatrzymania, nowe komentarze i diff brancha.
 - **Wymagania:** FR-4.3 do FR-4.6, FR-4.28b, FR-6.1, FR-10.3, SEC-8.5, SEC-8.10.
 - **Gotowe, gdy:** na trzech issue testowych plan ma wszystkie elementy z FR-4.3, zmiana z nową zależnością jest sklasyfikowana jako high-impact, a przebieg czeka na `plan:approved`.
 - **Zależy od:** P4.
 
 ### P6. Developer i bramka zakresu
 
-- **Zakres:** prompt Developera, sesja bez tokenu GitHub, commit i push wykonywane przez kod joba, Conventional Commits z odwołaniem do issue, draft PR z `Closes #<numer>`, issue spoza zakresu, aktualizacja planu z powodem, powrót do Developera po niezaliczonej bramce, bramka zakresu `gates/scope` w CI repozytorium demo. W nowym przebiegu po zatrzymaniu: kontynuacja brancha otwartego PR ze scaleniem `main` przez kod joba przed sesją agenta albo nowy branch i nowy draft PR, gdy poprzedni PR zamknięto.
+- **Zakres:** prompt Developera, model Developera w `prompts/roles.yml`, sesja bez tokenu GitHub, commit i push wykonywane przez kod joba, Conventional Commits z odwołaniem do issue, draft PR z `Closes #<numer>`, issue spoza zakresu, aktualizacja planu z powodem, powrót do Developera po niezaliczonej bramce, bramka zakresu `gates/scope` w CI repozytorium demo. W nowym przebiegu po zatrzymaniu: kontynuacja brancha otwartego PR ze scaleniem `main` przez kod joba przed sesją agenta albo nowy branch i nowy draft PR, gdy poprzedni PR zamknięto.
 - **Wymagania:** FR-4.7 do FR-4.12, FR-4.28b, QG-7.9, QG-7.11.
 - **Gotowe, gdy:** prosta funkcja z issue testowego przechodzi bramki, plik spoza planu nie przechodzi bramki zakresu, a niezaliczona bramka wraca do Developera bez zużycia rundy review. Aktualizacja planu do high-impact przenosi przebieg do `awaiting-plan-approval`, zdejmuje `plan:approved` i czeka na ponowne dodanie etykiety.
 - **Zależy od:** P5.
 
 ### P7. Reviewer i pętla review
 
-- **Zakres:** prompt Reviewera z checklistą ze spec 7.3, kontekst ograniczony do issue, planu, diffu, wyników bramek i wcześniejszych znalezisk, narzędzia tylko do odczytu, inny model niż Developer. Stabilny identyfikator znaleziska jako skrót z reguły, pliku i zakotwiczenia w kodzie. Werdykt jako check run `agent-review`, znaleziska jako komentarze review bez approvalu. Limit rund i eskalacja powtórzonego znaleziska. Na koniec PR oznaczony jako gotowy i prośba o review z opisem według FR-4.20, bez URL środowiska dev.
+- **Zakres:** prompt Reviewera z checklistą ze spec 7.3, kontekst ograniczony do issue, planu, diffu, wyników bramek i wcześniejszych znalezisk, narzędzia tylko do odczytu, model Reviewera w `prompts/roles.yml` inny niż model Developera (FR-5.5). Stabilny identyfikator znaleziska jako skrót z reguły, pliku i zakotwiczenia w kodzie. Werdykt jako check run `agent-review`, znaleziska jako komentarze review bez approvalu. Limit rund i eskalacja powtórzonego znaleziska. Na koniec PR oznaczony jako gotowy i prośba o review z opisem według FR-4.20, bez URL środowiska dev.
 - **Wymagania:** FR-4.13 do FR-4.18, FR-4.20, FR-5.2, FR-5.3, FR-5.5, FR-6.2, FR-6.3, FR-6.4, QG-7.10.
-- **Gotowe, gdy:** diff z celowo podłożonym naruszeniem dostaje `changes_requested`, poprawiony diff dostaje `approve`, a czwarta runda kończy się w `needs-human`. PR agenta po `approve` Reviewera i approvalu autora da się zmergować bez obejścia, a bez approvalu autora tylko obejściem przez administratora.
+- **Gotowe, gdy:** diff z celowo podłożonym naruszeniem dostaje `changes_requested`, poprawiony diff dostaje `approve`, a czwarta runda kończy się w `needs-human`. PR agenta po `approve` Reviewera i approvalu autora da się zmergować bez obejścia, a bez approvalu autora tylko obejściem przez administratora. Test odrzuca `prompts/roles.yml`, w którym Reviewer ma ten sam model co Developer.
 - **Zależy od:** P6.
 
 ### P8. Test end-to-end MVP
@@ -322,11 +322,12 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 |---|---|---|---|
 | FR-5.1 | MVP | P4 do P7 | Osobny job, sesja i token na rolę. |
 | FR-5.2 | MVP | P3, P7 | Reviewer publikuje tylko check run; merge wymaga approvalu code ownera albo obejścia przez administratora (rozdz. 8). |
-| FR-5.3, FR-5.5 | MVP | P7 | |
+| FR-5.3 | MVP | P7 | |
+| FR-5.5 | MVP | P7 | Modele ról w `prompts/roles.yml` w repozytorium pipeline'u; test odrzuca ten sam model Reviewera i Developera. |
 | FR-5.4 | MVP | P2, P7 | Lista narzędzi, hook SEC-9.7, brak tokenu GitHub w sesji. |
 | FR-5.6 | MVP | P4 | |
 | FR-5.7 | Później | F3 | |
-| FR-5.8 | Częściowo | P5 do P7, F4 | Prompty wersjonowane od MVP; bramka ewaluacji w F4. |
+| FR-5.8 | Częściowo | P5 do P7, F4 | Prompty i modele ról wersjonowane w `prompts/` od MVP; bramka ewaluacji w F4. |
 | FR-6.1, FR-10.3 | MVP | P5 | |
 | FR-6.2, FR-6.4 | MVP | P7 | |
 | FR-6.3 | Częściowo | P3, P7 | Trzy rulesety z przypiętymi źródłami checków; approval code ownera i `agent-review` obchodzi przy merge PR tylko administrator repozytorium (rozdz. 2.2). Obejście zwalnia też z approvalu (rozdz. 8). |
