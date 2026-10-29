@@ -53,7 +53,6 @@ const runSchema = z.object({
   history: z.array(z.object({ state: z.enum(RUN_STATES), at: time })),
   // The workflow run that works on the run now; stopping cancels it.
   workflowRun: z.object({ id: positive, role: z.enum(ROLES).optional() }),
-  admittedAt: time.optional(),
   branch: z.string().min(1).optional(),
   pr: positive.optional(),
   pushes: count,

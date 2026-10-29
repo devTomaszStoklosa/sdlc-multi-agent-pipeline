@@ -1,3 +1,4 @@
+import type { GitHub } from "./client.ts";
 import type {
   CheckConclusion,
   CheckOutput,
@@ -66,6 +67,19 @@ export class FakeGitHub
 
   constructor(clock: () => Date = () => new Date()) {
     this.clock = clock;
+  }
+
+  // The fake as the ports of one token.
+  ports(): GitHub {
+    return {
+      permissions: this,
+      comments: this,
+      issues: this,
+      pulls: this,
+      checks: this,
+      runs: this,
+      contents: this,
+    };
   }
 
   addIssue(number: number, fields: Partial<IssueInfo> = {}): IssueInfo {
