@@ -89,6 +89,10 @@ describe("prepare-session", () => {
         enabled: true,
         failIfUnavailable: true,
         network: { allowedDomains: ["registry.npmjs.org"] },
+        filesystem: { denyWrite: ["~"] },
+        credentials: {
+          envVars: [{ name: "CLAUDE_CODE_OAUTH_TOKEN", mode: "deny" }],
+        },
       },
     });
     expect(Object.keys(settings as object)).toContain("hooks");
