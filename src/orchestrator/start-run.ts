@@ -107,12 +107,12 @@ export async function admit(
     });
   }
   if (announce) {
-    await guardFor(context, record.issue, record.run.id).ensure(
-      "queue comment",
-    );
-    await context.app.comments.createComment(
-      record.issue,
-      queued(record.run.id, blocking),
+    const guard = guardFor(context, record.issue, record.run.id);
+    await guard.perform("queue comment", () =>
+      context.app.comments.createComment(
+        record.issue,
+        queued(record.run.id, blocking),
+      ),
     );
   }
   return undefined;

@@ -156,9 +156,11 @@ export async function performEscalations(
   const { run, issue } = applied.record;
   for (const action of applied.actions) {
     if (action.type !== "escalate") continue;
-    await guard.ensure("escalation label");
-    await ports.issues.addLabels(issue, [run.labels.needs_human]);
-    await guard.ensure("escalation comment");
-    await ports.comments.createComment(issue, escalation(run, action.reason));
+    await guard.perform("escalation label", () =>
+      ports.issues.addLabels(issue, [run.labels.needs_human]),
+    );
+    await guard.perform("escalation comment", () =>
+      ports.comments.createComment(issue, escalation(run, action.reason)),
+    );
   }
 }

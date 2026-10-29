@@ -62,6 +62,32 @@ export class RunGuard {
     if (reason !== undefined) throw new RunInactiveError(effect, reason);
   }
 
+  // The side effect after the check, logged with its start and end, so the
+  // stop summary can name an operation that finished after the stop
+  // (FR-4.28c, FR-4.28f).
+  async perform<T>(
+    effect: string,
+    action: () => Promise<T>,
+    options: GuardOptions = {},
+  ): Promise<T> {
+    await this.ensure(effect, options);
+    const startedAt = this.scope.now().toISOString();
+    const result = await action();
+    const endedAt = this.scope.now().toISOString();
+    await this.scope.log.append({
+      time: endedAt,
+      type: "side-effect",
+      issue: this.scope.issue,
+      run: this.scope.runId,
+      workflow_run: this.scope.workflowRunId,
+      started_at: startedAt,
+      ended_at: endedAt,
+      result: "done",
+      details: { effect },
+    });
+    return result;
+  }
+
   private async inactiveReason(
     options: GuardOptions,
   ): Promise<string | undefined> {

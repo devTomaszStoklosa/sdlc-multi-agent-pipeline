@@ -32,6 +32,8 @@ interface FakeRun extends WorkflowRunInfo {
   headSha?: string;
 }
 
+export const FAKE_REPOSITORY = "owner/demo";
+
 // GitHub in memory for tests. Every write is recorded in `writes`, so a test
 // can check that nothing happened after a run stopped.
 export class FakeGitHub
@@ -101,7 +103,7 @@ export class FakeGitHub
       merged: false,
       headRef: "chore/1-stub-run",
       headSha: "1111111",
-      headRepo: "owner/repo",
+      headRepo: FAKE_REPOSITORY,
       labels: [],
       url: `https://github.test/pull/${String(fields.number)}`,
       ...fields,

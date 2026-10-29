@@ -32,28 +32,32 @@ async function push(
     (await newStubBranch(issue.number, (name) => contents.branchExists(name)));
   const main = await contents.defaultBranch();
   if (!(await contents.branchExists(branch))) {
-    await guard.ensure("branch");
-    await contents.createBranch(branch, main.sha);
+    await guard.perform("branch", () =>
+      contents.createBranch(branch, main.sha),
+    );
   }
-  await guard.ensure("push");
-  const sha = await contents.writeFile({ branch, ...change });
+  const sha = await guard.perform("push", () =>
+    contents.writeFile({ branch, ...change }),
+  );
   let pr = run.pr;
   if (pr === undefined) {
-    await guard.ensure("draft pull request");
-    const created = await pulls.createDraftPull({
-      head: branch,
-      base: main.name,
-      title: `Zaślepka P4: ${issue.title}`,
-      body: `Closes #${String(issue.number)}\n\nPR przebiegu ${run.id} na zaślepkach ról (P4).`,
-    });
+    const created = await guard.perform("draft pull request", () =>
+      pulls.createDraftPull({
+        head: branch,
+        base: main.name,
+        title: `Zaślepka P4: ${issue.title}`,
+        body: `Closes #${String(issue.number)}\n\nPR przebiegu ${run.id} na zaślepkach ról (P4).`,
+      }),
+    );
     pr = created.number;
   }
   return { kind: "pushed", sha, branch, pr };
 }
 
 async function comment(scope: EffectScope, body: string): Promise<void> {
-  await scope.guard.ensure("comment");
-  await scope.context.app.comments.createComment(scope.issue.number, body);
+  await scope.guard.perform("comment", () =>
+    scope.context.app.comments.createComment(scope.issue.number, body),
+  );
 }
 
 async function completeReview(
@@ -66,18 +70,16 @@ async function completeReview(
     changes_requested: "failure",
     failed: "cancelled",
   } as const;
-  await scope.guard.ensure("agent-review result");
-  await scope.context.app.checks.completeCheckRun(
-    scope.checkRunId,
-    conclusion[verdict],
-    {
+  const id = scope.checkRunId;
+  await scope.guard.perform("agent-review result", () =>
+    scope.context.app.checks.completeCheckRun(id, conclusion[verdict], {
       title: {
         approve: "approve",
         changes_requested: "changes_requested",
         failed: "Review przerwany",
       }[verdict],
       summary: `Werdykt zaślepki Reviewera w przebiegu ${scope.run.id}.`,
-    },
+    }),
   );
 }
 

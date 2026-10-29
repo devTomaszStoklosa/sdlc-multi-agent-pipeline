@@ -135,10 +135,8 @@ async function work(
   const scope: EffectScope = { context, guard, run, issue };
   const { pushedSha } = run.progress;
   if (role === "reviewer" && pushedSha !== undefined) {
-    await guard.ensure("agent-review start");
-    scope.checkRunId = await context.app.checks.startCheckRun(
-      AGENT_REVIEW,
-      pushedSha,
+    scope.checkRunId = await guard.perform("agent-review start", () =>
+      context.app.checks.startCheckRun(AGENT_REVIEW, pushedSha),
     );
   }
   const limits = runLimits(run, context.baseline);

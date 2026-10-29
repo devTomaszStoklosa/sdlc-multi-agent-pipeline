@@ -6,7 +6,7 @@ import { BASELINE } from "../config/fixtures.ts";
 import { CommentRunStateStore } from "../core/run-store/comment-store.ts";
 import type { RunRecord } from "../core/run-store/run-record.ts";
 import type { RunStateName } from "../core/state-machine/states.ts";
-import { FakeGitHub } from "../github/fake.ts";
+import { FAKE_REPOSITORY, FakeGitHub } from "../github/fake.ts";
 import type { Role } from "../hooks/roles.ts";
 import { advance } from "./advance.ts";
 import { decide, type DecideContext } from "./decide.ts";
@@ -15,7 +15,7 @@ import { runRoleJob, type RoleJobContext } from "./role-job.ts";
 import { roleJobOutputSchema } from "./role-output.ts";
 import { CONFIG_PATH } from "./start-run.ts";
 
-export const REPO = "owner/demo";
+export const REPO = FAKE_REPOSITORY;
 export const AUTHOR = { login: "author", type: "User" };
 export const CONFIG = `version: 1
 commands:
