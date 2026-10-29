@@ -1,6 +1,7 @@
 // The entry point of the orchestrator jobs in the reusable workflows.
 // Usage: orchestrator <command> [--issue <n>] [--role <role>]
-// Commands: filter, scopes, decide, role, advance, target, cancel, finalize.
+// Commands: filter, scopes, decide, role, advance, target, cancel, wait-run,
+// finalize.
 // Tokens and paths come from the environment, never from arguments, so they
 // do not appear in the process list. Exit codes: 0 done, 1 failed, 2 usage.
 import { parseArgs } from "node:util";
@@ -20,6 +21,7 @@ import {
   scopeOutputs,
 } from "./scopes.ts";
 import { cancelActiveRun, finalize } from "./terminate.ts";
+import { waitUntilCompleted } from "./terminal-runs.ts";
 import {
   resolveTarget,
   terminalTargetSchema,
@@ -156,6 +158,20 @@ async function cancel(): Promise<void> {
   await setOutputs({ cancelled: id === undefined ? "" : String(id) });
 }
 
+async function waitRun(): Promise<void> {
+  const read = github(TOKENS.read);
+  const id = Number(env("SDLC_CANCELLED"));
+  const completedAt = await waitUntilCompleted(
+    { runs: read.runs, now: () => new Date(), wait },
+    id,
+  );
+  console.log(
+    completedAt === undefined
+      ? `Run ${String(id)} is still running`
+      : `Run ${String(id)} completed at ${completedAt}`,
+  );
+}
+
 async function finalizeCommand(): Promise<void> {
   const app = github(TOKENS.app);
   const read = github(TOKENS.read);
@@ -183,6 +199,7 @@ const COMMANDS: Record<string, (given: Args) => Promise<void>> = {
   advance: advanceCommand,
   target,
   cancel,
+  "wait-run": waitRun,
   finalize: finalizeCommand,
 };
 
