@@ -135,7 +135,9 @@ Każda rola działa w osobnym jobie, z osobnym tokenem App i osobną sesją (FR-
 - listą dozwolonych narzędzi (Planner i Reviewer: tylko odczyt i wyszukiwanie; Developer: odczyt, edycja, zapis i polecenia powłoki ograniczone hookami);
 - limitem tur (`--max-turns`);
 - wynikiem w JSON, który zawiera też zużycie tokenów i szacunek kosztu;
-- plikiem ustawień z hookami `PreToolUse`, `PostToolUse` i `Stop`. Hooki to skrypty Node zbudowane z kodu TypeScript pipeline'u, które czytają zdarzenie z wejścia standardowego.
+- plikiem ustawień z hookami `PreToolUse`, `PostToolUse`, `PostToolUseFailure` i `Stop` oraz z sandboxem poleceń powłoki, bez ustawień projektu z przestrzeni roboczej (`--setting-sources user`), żeby repozytorium nie osłabiło hooków. Hooki to skrypt Node z kodu TypeScript pipeline'u, uruchamiany bez kroku budowania (usuwanie typów w Node 22), który czyta zdarzenie z wejścia standardowego. Plik ustawień i kontekst hooków zapisuje `npm run prepare-session` poza przestrzenią roboczą, więc agent nie zmieni własnych hooków.
+
+Hook `PostToolUse` dopisuje ścieżkę edytowanego pliku do poleceń `commands.format` i `commands.lint` (QG-9.9), więc te polecenia muszą przyjmować ścieżki plików i nie mogą zgłaszać błędu dla plików, których narzędzie nie obsługuje (np. `prettier --write --ignore-unknown`, `eslint --no-warn-ignored`). Hook `Stop` uruchamia je bez ścieżek (QG-9.12).
 
 Prompty ról i ich modele są wersjonowane w `prompts/` (FR-5.8). Dokładne flagi CLI zostaną potwierdzone w P2 (rozdz. 12).
 
