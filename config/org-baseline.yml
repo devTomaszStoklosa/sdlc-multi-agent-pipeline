@@ -28,5 +28,45 @@ limits:
   max_turns_per_stage: 50
 
 hooks:
+  # Paths the agent may not write (SEC-9.1). Glob syntax: `**` matches any
+  # number of directories, `*` and `?` match within one directory, and every
+  # wildcard also matches dotfiles.
   deny_paths:
     - ".github/**"
+    - ".git/**"
+  # Files the agent may not read or print, because they hold secrets (SEC-9.3).
+  # A path outside the workspace is matched without its leading slash.
+  secret_paths:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/*.p12"
+    - "**/*.pfx"
+    - "**/id_rsa*"
+    - "**/id_ecdsa*"
+    - "**/id_ed25519*"
+    - "**/.ssh/**"
+    - "**/.aws/**"
+    - "**/.docker/config.json"
+    - "**/.npmrc"
+    - "**/.netrc"
+    - "**/.git-credentials"
+    - "**/.claude/.credentials.json"
+  # Commands the agent may not run (SEC-9.5): regular expressions matched
+  # case-insensitively against each command of a shell line, with its words
+  # joined by single spaces. Recursive removal outside the workspace is blocked
+  # in code, because it depends on the workspace path.
+  destructive_commands:
+    - '^git\b.*\s(rebase|filter-branch|filter-repo)\b'
+    - '^git\b.*\scommit\b.*\s--amend\b'
+    - '^git\b.*\sreset\b.*\s--hard\b'
+    - '\b(drop|truncate)\s+(database|schema|table)\b'
+    - '^(dropdb|mkfs(\.\w+)?|wipefs|shred)\b'
+    - '^dd\b.*\sof=/dev/'
+
+# Hosts the agent's tools may connect to (SEC-8.4, SEC-9.4). A repository cannot
+# add hosts (FR-10.2), so this section is not part of .sdlc-agents.yml.
+network:
+  allowed_hosts:
+    - registry.npmjs.org

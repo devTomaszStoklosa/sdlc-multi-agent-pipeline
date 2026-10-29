@@ -45,7 +45,7 @@ const lowerIsStricter = ranked<number>((value) => value);
 const byLevel = <T extends string>(levels: readonly T[]) =>
   ranked<T>((value) => levels.indexOf(value));
 
-// A repository can only add paths to a baseline list.
+// A repository can only add entries to a baseline list.
 const union: FieldRule<string[]> = {
   resolve(value, baseline) {
     return {
@@ -77,7 +77,11 @@ const POLICY_RULES: { [S in PolicySection]: SectionRules<OrgBaseline[S]> } = {
     max_minutes_per_run: lowerIsStricter,
     max_turns_per_stage: lowerIsStricter,
   },
-  hooks: { deny_paths: union },
+  hooks: {
+    deny_paths: union,
+    secret_paths: union,
+    destructive_commands: union,
+  },
 };
 
 class PolicyResolver {
@@ -136,6 +140,7 @@ export function resolvePolicy(
       comment_debounce_seconds: repo.limits.comment_debounce_seconds,
     },
     hooks: resolver.section("hooks", repo.hooks, baseline.hooks, rules.hooks),
+    network: baseline.network,
   };
   return { effective, loosenings: resolver.loosenings };
 }

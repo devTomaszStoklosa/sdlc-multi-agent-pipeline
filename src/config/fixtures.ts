@@ -30,7 +30,12 @@ export const BASELINE: OrgBaseline = {
     max_minutes_per_run: 45,
     max_turns_per_stage: 50,
   },
-  hooks: { deny_paths: [".github/**"] },
+  hooks: {
+    deny_paths: [".github/**"],
+    secret_paths: ["**/.env"],
+    destructive_commands: ["^dropdb\\b"],
+  },
+  network: { allowed_hosts: ["registry.npmjs.org"] },
 };
 
 // The minimal configuration with whole top-level sections added or replaced.
