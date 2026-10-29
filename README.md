@@ -73,6 +73,8 @@ Przebieg sterują dwa reusable workflows wywoływane z cienkich workflow repozyt
 - [orchestrate.yml](.github/workflows/orchestrate.yml): job `filter` odrzuca zdarzenia botów i obcych, `decide` w grupie `concurrency` per issue liczy przejście maszyny stanów, a potem działają najwyżej dwie pary job roli i `advance`. Job roli wykonuje skutki uboczne tokenem roli, a `advance` zapisuje stan.
 - [terminate.yml](.github/workflows/terminate.yml): zatrzymanie etykietą `agent:stop` i zakończenie po zamknięciu lub merge'u PR. Job `cancel` poza grupą anuluje run przebiegu, a `finalize` zapisuje stan końcowy, zdejmuje etykiety, kończy `agent-review` i publikuje podsumowanie zatrzymania.
 
+W trakcie sesji roli job co 15 s sprawdza etykiety issue i PR oraz stan PR i po `agent:stop` albo zamknięciu PR przerywa sesję, bo GitHub dostarcza anulowanie do działającego kroku z opóźnieniem ok. minuty.
+
 Stan przebiegu jest w ukrytym komentarzu GitHub App w issue ([src/core/run-store](src/core/run-store)), a przejścia w [src/core/state-machine](src/core/state-machine). Każdy job zapisuje log zdarzeń w JSONL i wgrywa go jako artefakt `run-events-<job>-<próba>`.
 
 Ręczne uruchomienie workflow Orchestrate z numerem issue startuje przebieg czekający w kolejce, gdy nie ma innego aktywnego przebiegu, odbiera wynik bramek, który nie dotarł, a etap, którego job zakończył się bez wyniku, kieruje do `needs-human`.
