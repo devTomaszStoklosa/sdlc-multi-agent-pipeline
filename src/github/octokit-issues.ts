@@ -78,12 +78,20 @@ export class GitHubPermissions extends RepoApi implements PermissionsPort {
 }
 
 export class GitHubComments extends RepoApi implements CommentsPort {
+  // A branch name may point to an issue that does not exist, e.g. a branch
+  // that a person named after an issue of another repository. Such an issue
+  // has no comments, so it has no run.
   async listComments(issue: number): Promise<IssueComment[]> {
-    const comments = await this.octokit.paginate(
-      this.octokit.rest.issues.listComments,
-      { ...this.repo, issue_number: issue, per_page: 100 },
-    );
-    return comments.map(toComment);
+    try {
+      const comments = await this.octokit.paginate(
+        this.octokit.rest.issues.listComments,
+        { ...this.repo, issue_number: issue, per_page: 100 },
+      );
+      return comments.map(toComment);
+    } catch (error) {
+      if (hasStatus(error, 404)) return [];
+      throw error;
+    }
   }
 
   async createComment(issue: number, body: string): Promise<IssueComment> {
