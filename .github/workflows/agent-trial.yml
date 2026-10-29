@@ -59,7 +59,8 @@ jobs:
         with:
           node-version-file: pipeline/.nvmrc
 
-      # The sandbox needs bubblewrap and socat, and Ubuntu 24.04 blocks the
+      # The Claude Code sandbox needs bubblewrap and socat, the hooks run
+      # project commands in bubblewrap, and Ubuntu 24.04 blocks the
       # unprivileged user namespaces that bubblewrap uses.
       - name: Install Claude Code and the sandbox
         run: |

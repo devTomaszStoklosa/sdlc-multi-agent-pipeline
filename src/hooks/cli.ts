@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { text } from "node:stream/consumers";
 import { JsonlToolCallLog } from "../audit/tool-log.ts";
-import { ShellCommandRunner } from "./commands.ts";
+import { SandboxedCommandRunner } from "./commands.ts";
 import { hookContextSchema } from "./context.ts";
 import { BLOCK_EXIT_CODE, type HookResponse } from "./events.ts";
 import { runFailClosed } from "./fail-closed.ts";
@@ -26,7 +26,10 @@ async function handle(
   );
   const dependencies = {
     log: new JsonlToolCallLog(context.audit_log),
-    runner: new ShellCommandRunner(context.workspace, event.commandTimeoutMs),
+    runner: new SandboxedCommandRunner(
+      context.workspace,
+      event.commandTimeoutMs,
+    ),
     now: () => new Date(),
   };
   return event.handle(JSON.parse(rawInput), context, dependencies);
