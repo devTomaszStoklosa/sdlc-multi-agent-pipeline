@@ -183,6 +183,8 @@ flowchart LR
 | QG-7.9 Zakres | `gates/scope` z tego repozytorium |
 | QG-9.13, QG-9.14 Hooki gita | lefthook (formatter, linter, gitleaks) i commitlint |
 
+Progi bramek są w MVP stałe i równe sekcji `gates` z `config/org-baseline.yml`. Workflow bramek nie czyta `gates.*` z `.sdlc-agents.yml`, więc zaostrzenie progu w konfiguracji repozytorium nie ma w MVP skutku w CI (rozdz. 8). Zmianę `gates` w bazie organizacji autor przenosi ręcznie do workflow bramek repozytorium demo, w PR aktualizującym tag pipeline'u.
+
 Te same sprawdzenia działają w CI (QG-7.12). Ochronę `main` tworzą trzy rulesety (rozdz. 2.2, FR-6.3). Ruleset bramek wymaga wszystkich bramek i nie ma listy obejść. Ruleset approvalu wymaga approvalu code ownera, a ruleset review agenta check runa `agent-review`. Oba przy merge PR może obejść tylko administrator repozytorium, a obejście approvalu to odstępstwo z rozdz. 8. Tożsamości pipeline'u nie ma na żadnej liście obejść. Każdy wymagany check ma przypięte źródło, a joby bramek nie mają uprawnień `checks: write` ani `statuses: write` (QG-7.14).
 
 ---
@@ -240,7 +242,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 
 ### P4. Orchestrator i magazyn stanu
 
-- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu (z kopią `.sdlc-agents.yml` i SHA commita `main` z chwili startu przebiegu, w tym z nazwami etykiet, FR-10.5), `orchestrate.yml`, `stop.yml`, `pr-closed.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop` z porządkowaniem etykiet i check runa, zakończenie przebiegu po zamknięciu lub merge'u PR w każdym stanie aktywnym MVP, odrzucanie `agent:ready` przy obecnym `agent:stop`, `needs-human`, limity czasu i tur (czas jako suma pobytów w stanach pracy, liczona z przejść zapisanych w komentarzu ze stanem, NFR-11.5), ponowienia, obsługa limitu planu Pro, log zdarzeń, `.sdlc-agents.yml` w repozytorium demo, wprowadzony przez PR i zwalidowany CLI z P1 z tagu pipeline'u przypiętego w cienkich workflow (FR-10.1). Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
+- **Zakres:** maszyna stanów dla podzbioru MVP, magazyn stanu w komentarzu (z kopią `.sdlc-agents.yml` i SHA commita `main` z chwili startu przebiegu, w tym z nazwami etykiet, FR-10.5), `orchestrate.yml`, `stop.yml`, `pr-closed.yml`, wyzwalacze ze spec 9.4 w zakresie MVP, filtr autorów zdarzeń, `agent:stop` z porządkowaniem etykiet i check runa, zakończenie przebiegu po zamknięciu lub merge'u PR w każdym stanie aktywnym MVP, odrzucanie `agent:ready` przy obecnym `agent:stop`, `needs-human`, limity czasu i tur (czas jako suma pobytów w stanach pracy, liczona z przejść zapisanych w komentarzu ze stanem, NFR-11.5), ponowienia, obsługa limitu planu Pro, log zdarzeń, `.sdlc-agents.yml` w repozytorium demo bez sekcji `gates`, bo w MVP bramki jej nie czytają (rozdz. 3.6), wprowadzony przez PR i zwalidowany CLI z P1 z tagu pipeline'u przypiętego w cienkich workflow (FR-10.1). Role działają jako zaślepki zwracające gotowy wynik, więc ten przyrost nie zużywa limitu Pro.
 - **Wymagania:** FR-4.1, FR-4.2, FR-4.23, FR-4.28 do FR-4.33, FR-4.35, NFR-4.28d, FR-5.6, FR-6.7, SEC-8.3, SEC-8.6 do SEC-8.9, SEC-9.8a, FR-10.1, FR-10.4, FR-10.5, NFR-11.3 do NFR-11.5, QG-12.3a (częściowo).
 - **Gotowe, gdy:** przebieg na zaślepkach przechodzi przez wszystkie stany MVP w repozytorium demo, każde przejście ma test jednostkowy, zdarzenia od nieuprawnionych autorów nie startują żadnej roli, a `agent:stop` dodane w trakcie joba roli przerywa run bez czekania na jego koniec, w czasie z NFR-4.28d. Po zatrzymaniu nie ma żadnych skutków ubocznych poza dokończeniem operacji, która przeszła sprawdzenie przed dodaniem etykiety (FR-4.28c), a komentarze innych użytkowników dodane w tym czasie nie opóźniają ani nie anulują zatrzymania. Każde zatrzymanie publikuje w issue dokładnie jedno podsumowanie z elementami z FR-4.28f, także przy `agent:stop` dodanym do issue i do PR. Zatrzymanie działa również przy niepoprawnym `.sdlc-agents.yml` w repozytorium demo (FR-10.4). Zmiana `.sdlc-agents.yml` zmergowana w trakcie przebiegu nie zmienia jego limitów ani nazw etykiet (FR-10.5). Testy zatrzymania z QG-12.3a w zakresie MVP przechodzą na zaślepkach w każdym stanie aktywnym MVP, a zdarzenia zatrzymania i sprawdzeń z FR-4.28c trafiają do logu zdarzeń (NFR-11.3). Ponowne `agent:ready` po zdjęciu `agent:stop` startuje nowy przebieg, a `agent:ready` przy obecnym `agent:stop` zostaje zdjęte z komentarzem. Zamknięcie lub merge PR w trakcie joba roli przerywa run w czasie z NFR-4.28d, przebieg przechodzi do `done`, z issue znikają `agent:ready` i `plan:approved`, a po zamknięciu nie ma żadnych pushy ani komentarzy przebiegu (FR-4.35). Ponowne `agent:ready` po zamknięciu PR bez merge'u startuje nowy przebieg.
 - **Zależy od:** P2, P3.
@@ -283,7 +285,7 @@ Każdy przyrost to jeden ticket, jeden branch `<typ>/<numer-ticketu>-<krótki-op
 | F3 | Wdrożenie branchu PR na dev przez agenta DevOps z OIDC, na darmowym celu (np. podgląd w GitHub Pages albo kontener uruchamiany w samym jobie) | FR-4.19, FR-5.7 | OQ-2 |
 | F4 | Zestaw ewaluacji i bramka ewaluacji w CI pipeline'u, dawkowane pod limity Pro; opcjonalny spike frameworków na tym zestawie | QG-12.1, QG-12.3 do QG-12.7, FR-5.8 | OQ-4 |
 | F5 | Obserwowalność i metryki: magazyn zdarzeń tylko do dopisywania (darmowy), trace, zapis wyjątków, linia bazowa, dashboard zestawu podstawowego ze spec 14.10 | NFR-11.1, NFR-11.2, NFR-11.6, QG-7.13 | OQ-6, OQ-9 |
-| F6 | Pilotaż na prawdziwym repozytorium (faza 1 ze spec 15), pełna allowlista ruchu sieciowego | SEC-8.4 | OQ-1 dla pilotażu, OQ-12 |
+| F6 | Pilotaż na prawdziwym repozytorium (faza 1 ze spec 15), pełna allowlista ruchu sieciowego, progi bramek z `gates.*` w `.sdlc-agents.yml` | SEC-8.4, QG-7.1, QG-7.2, QG-7.4, QG-7.6 do QG-7.8, FR-10.2 | OQ-1 dla pilotażu, OQ-12 |
 
 ---
 
@@ -331,7 +333,8 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | FR-6.5 | MVP | P2, P3 | Brak tokenu w sesji, hook SEC-9.8, App bez wyjątku od branch protection. |
 | FR-6.6 | MVP | P3 | Repozytorium demo nie ma środowisk staging ani produkcja. Wymóg recenzentów wraca przy pierwszym takim środowisku. |
 | FR-6.7 | MVP | P4 | Pipeline nie ma ścieżki, w której agent przyznaje wyjątek. |
-| QG-7.1, QG-7.2, QG-7.3, QG-7.4, QG-7.5, QG-7.6, QG-7.7, QG-7.8 | MVP | P3 | Narzędzia w rozdz. 3.6. |
+| QG-7.1, QG-7.2, QG-7.4, QG-7.6, QG-7.7, QG-7.8 | Częściowo | P3, F6 | Narzędzia w rozdz. 3.6. Progi równe bazie organizacji, a `gates.*` z `.sdlc-agents.yml` nie działa w CI do F6 (rozdz. 8). |
+| QG-7.3, QG-7.5 | MVP | P3 | Narzędzia w rozdz. 3.6. |
 | QG-7.9 | MVP | P6 | |
 | QG-7.10 | MVP | P7 | |
 | QG-7.11 | MVP | P2, P3, P6 | Hooki, App bez `workflows`, zmiany konfiguracji bramek są high-impact. |
@@ -362,9 +365,9 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | Wymagania | Status | Gdzie | Uwagi |
 |---|---|---|---|
 | FR-10.1 | MVP | P1, P4 | Schemat i CLI walidacji w P1, plik w repozytorium demo w P4. |
-| FR-10.2 | MVP | P1 | |
+| FR-10.2 | Częściowo | P1, F6 | Zaostrzenie `gates.*` przechodzi walidację, ale do F6 nie działa w CI (rozdz. 8). |
 | FR-10.4 | MVP | P1, P4 | Schemat bez `labels.stop`; `stop.yml` nie czyta `.sdlc-agents.yml`. |
-| FR-10.5 | MVP | P1, P4 | Kopia konfiguracji w komentarzu ze stanem. Bramki w CI repozytorium demo jej nie używają. |
+| FR-10.5 | MVP | P1, P4 | Kopia konfiguracji w komentarzu ze stanem. Bramki w CI repozytorium demo jej nie używają i do F6 stosują progi z bazy organizacji (rozdz. 8). |
 | NFR-11.1 | Odstępstwo | F5 | W MVP JSONL jako artefakt workflow. |
 | NFR-11.2, NFR-11.6 | Później | F5 | |
 | NFR-11.3, NFR-11.4 | MVP | P4 | |
@@ -407,6 +410,7 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Brak okresowego porównania przebiegów z GitHubem dla pozostałych zdarzeń (FR-4.36) | Powód jak przy FR-4.28e. W MVP działa jeden przebieg naraz, a jedynym człowiekiem jest autor, więc przebieg, który utknął, widać w komentarzu ze stanem. Utracone zdarzenie autor odtwarza, powtarzając działanie: zdejmuje i ponownie dodaje `agent:ready` albo `plan:approved`, dodaje i ponownie zdejmuje `needs-human`, otwiera ponownie i zamyka PR, ponownie uruchamia workflow bramek albo jeszcze raz dodaje komentarz. Zmergowanego PR nie da się ponownie otworzyć, więc przebieg po utraconym merge'u autor kończy etykietą `agent:stop`. | Przy własnym serwerze webhooków, razem z FR-4.28e i SEC-8.8 |
 | Approval code ownera z obejściem przez administratora (FR-6.3) | Autor jest jedynym człowiekiem i code ownerem repozytorium demo, a GitHub nie pozwala zatwierdzić własnego PR. Bez obejścia nie da się zmergować żadnego ręcznego PR autora, w tym PR z zawartością początkową w P3. Obejście przy merge zwalnia naraz ze wszystkich rulesetów, które administrator może obejść (rozdz. 12), więc obejście `agent-review` na PR agenta zwalnia też z approvalu. Bramki obowiązują zawsze, a każde obejście widać w historii rulesetów. | Przy drugim code ownerze, najpóźniej w pilotażu (F6) |
 | Wyłącznik globalny jako procedura ręczna (FR-4.34) | W MVP działa jeden przebieg naraz w jednym repozytorium (rozdz. 1.2). `agent:ready` dodane przy wyłączonym `orchestrate.yml` nie jest zdejmowane ani komentowane, więc po ponownym włączeniu workflow trzeba je dodać jeszcze raz. | Przy kilku przebiegach naraz albo w F6 |
+| Progi bramek równe bazie organizacji, bez odczytu `gates.*` z `.sdlc-agents.yml` (QG-7.1, QG-7.2, QG-7.4, QG-7.6 do QG-7.8, FR-10.2) | W MVP jest jedno repozytorium, a jego `.sdlc-agents.yml` autor pisze bez sekcji `gates` (P4), więc progi z konfiguracji i tak byłyby równe bazie. Odczyt progów wymagałby w workflow bramek kodu pipeline'u i konfiguracji z `main`. Zaostrzenie `gates.*` przechodzi walidację (P1), ale nie działa w CI, a zmianę bazy organizacji autor przenosi do workflow bramek ręcznie (rozdz. 3.6). | F6, przed podłączeniem repozytorium pilotażowego |
 
 ---
 
