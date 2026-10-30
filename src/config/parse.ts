@@ -11,7 +11,10 @@ export type ParseResult<T> =
   { ok: true; value: T } | { ok: false; errors: string[] };
 
 // Duplicate keys are YAML errors, so a second key cannot silently override the first.
-function parseYaml<T>(text: string, schema: z.ZodType<T>): ParseResult<T> {
+export function parseYaml<T>(
+  text: string,
+  schema: z.ZodType<T>,
+): ParseResult<T> {
   const document = parseDocument(text, { uniqueKeys: true });
   if (document.errors.length > 0) {
     return { ok: false, errors: document.errors.map((error) => error.message) };

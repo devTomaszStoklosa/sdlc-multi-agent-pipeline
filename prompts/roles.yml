@@ -1,0 +1,11 @@
+# The model and prompt of each role (plan 2.2, FR-5.8). The model lives here,
+# next to the prompts, so only a pull request in this repository can change it
+# and a connected repository cannot give the Reviewer the Developer's model
+# (FR-5.5). From F4 on, the evaluation gate covers changes of this file too
+# (QG-12.4). The Developer and the Reviewer join in P6 and P7.
+version: 1
+
+roles:
+  planner:
+    model: claude-sonnet-5-5
+    prompt: planner.md
