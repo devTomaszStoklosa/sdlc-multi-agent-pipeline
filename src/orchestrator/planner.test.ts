@@ -152,6 +152,7 @@ describe("plannerBrief", () => {
     ]);
     const brief = await plannerBrief(sources(github), secondRun("stopped"));
     expect(brief).toEqual({
+      kind: "planner",
       comments: [{ author: "author", at: AT, body: "Bez nowych zależności." }],
       previousPlans: [{ at: AT, body: "### Plan, wersja 1 (przebieg 1-1)" }],
       stopSummary: "### Przebieg 1-1 zatrzymany\n\n- **Zatrzymał:** @author",

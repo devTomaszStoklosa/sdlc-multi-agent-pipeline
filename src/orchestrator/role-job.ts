@@ -1,4 +1,4 @@
-import type { PlannerBrief } from "../agents/planner/brief.ts";
+import type { RoleBrief } from "../agents/brief.ts";
 import {
   roleResultSchema,
   type RoleInput,
@@ -29,10 +29,7 @@ export interface RoleJobContext extends JobContext {
   appId: number;
 }
 
-type Brief = (
-  context: RoleJobContext,
-  record: RunRecord,
-) => Promise<PlannerBrief>;
+type Brief = (context: RoleJobContext, record: RunRecord) => Promise<RoleBrief>;
 
 // What the job gathers for a role before its session (SEC-8.10). The other
 // roles get their context in P6 and P7.

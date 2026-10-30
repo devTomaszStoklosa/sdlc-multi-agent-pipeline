@@ -1,6 +1,7 @@
 import type { RoleSession } from "../claude-runner.ts";
+import { newNonce } from "../prompt-data.ts";
 import { planJsonSchema } from "./plan.ts";
-import { newNonce, plannerPrompt } from "./prompt.ts";
+import { plannerPrompt } from "./prompt.ts";
 
 // The Planner on Claude Code: the prompt with the brief, and the plan as the
 // session's structured output.

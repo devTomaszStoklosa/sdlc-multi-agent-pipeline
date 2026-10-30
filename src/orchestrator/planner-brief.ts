@@ -80,6 +80,7 @@ export async function plannerBrief(
   const own = comments.filter((comment) => comment.appId === sources.appId);
   const allowed = await writers(comments, sources.permissions);
   return {
+    kind: "planner",
     comments: comments
       .filter(
         (comment) => isPerson(comment) && allowed.has(comment.authorLogin),

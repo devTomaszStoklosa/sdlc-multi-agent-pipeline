@@ -1,4 +1,4 @@
-import type { PlannerBrief } from "../agents/planner/brief.ts";
+import type { RoleBrief } from "../agents/brief.ts";
 import type { RoleOutput, RoleResult } from "../agents/role-runner.ts";
 import type { Run } from "../core/run-store/run-record.ts";
 import { newStubBranch } from "./branch.ts";
@@ -17,8 +17,8 @@ export interface EffectScope {
   issue: { number: number; title: string; body: string };
   // The in-progress `agent-review` check run of a Reviewer job.
   checkRunId?: number;
-  // What the job gathered for a Planner session.
-  brief?: PlannerBrief;
+  // What the job gathered for the session.
+  brief?: RoleBrief;
 }
 
 type Change = Extract<RoleOutput, { role: "developer" }>["change"];

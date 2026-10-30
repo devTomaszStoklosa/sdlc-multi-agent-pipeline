@@ -34,6 +34,7 @@ describe("plannerPrompt", () => {
   it("adds the brief of a run after a stop", () => {
     const prompt = plannerPrompt(
       input({
+        kind: "planner",
         comments: [
           {
             author: "author",

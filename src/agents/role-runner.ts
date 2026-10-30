@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Role } from "../hooks/roles.ts";
-import type { PlannerBrief } from "./planner/brief.ts";
+import type { RoleBrief } from "./brief.ts";
 import { planSchema } from "./planner/plan.ts";
 
 // What a role session gets (plan 3.4). A session also gets the workspace,
@@ -18,8 +18,8 @@ export interface RoleInput {
   // The run's .sdlc-agents.yml copy (FR-10.5) and the turn limit of a stage.
   config: string;
   maxTurns: number;
-  // What the job gathered for the Planner (FR-4.28b, SEC-8.10).
-  brief?: PlannerBrief;
+  // What the job gathered for the role (FR-4.12, FR-4.28b, SEC-8.10).
+  brief?: RoleBrief;
 }
 
 const count = z.number().int().min(0);
