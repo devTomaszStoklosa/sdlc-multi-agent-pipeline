@@ -89,7 +89,15 @@ describe("prepare-session", () => {
         enabled: true,
         failIfUnavailable: true,
         network: { allowedDomains: ["registry.npmjs.org"] },
-        filesystem: { denyWrite: ["~/.claude", "~/.config", "~/.npmrc"] },
+        filesystem: {
+          denyWrite: [
+            "~/.claude",
+            "~/.config",
+            "~/.npmrc",
+            path.resolve(fileURLToPath(new URL("../../", import.meta.url))),
+            path.resolve(out),
+          ],
+        },
         credentials: {
           envVars: [{ name: "CLAUDE_CODE_OAUTH_TOKEN", mode: "deny" }],
         },

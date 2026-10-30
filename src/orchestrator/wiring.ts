@@ -99,6 +99,7 @@ export async function claudeRunner(): Promise<RoleRunner> {
   return new ClaudeRoleRunner({
     workspace: env("SDLC_WORKSPACE"),
     sessionsDir: env("SDLC_SESSIONS_DIR"),
+    protect: [env("RUNNER_TEMP")],
     baseline: await loadBaseline(),
     token: env("CLAUDE_CODE_OAUTH_TOKEN"),
     sessions: { planner: plannerSession },

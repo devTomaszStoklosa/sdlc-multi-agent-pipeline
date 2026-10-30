@@ -1,6 +1,7 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import { BASELINE, configText } from "../config/fixtures.ts";
 import {
@@ -52,6 +53,7 @@ function runner(
   return new ClaudeRoleRunner({
     workspace: "/work/repo",
     sessionsDir,
+    protect: ["/work/_temp"],
     baseline: BASELINE,
     token: TOKEN,
     sessions,
@@ -109,6 +111,27 @@ describe("ClaudeRoleRunner", () => {
     expect(call?.input).toBe("Plan it. #12");
     expect(call?.cwd).toBe("/work/repo");
     expect(await readFile(path.join(dir, "result.json"), "utf8")).toBe(STDOUT);
+  });
+
+  // Shell commands of the session run next to these directories in the
+  // runner's home directory, which the sandbox does not protect by itself.
+  it("denies the session writes to the pipeline, the sessions and the job's files", async () => {
+    await runner().run(input, new AbortController().signal);
+    const settings = JSON.parse(
+      await readFile(
+        path.join(sessionsDir, "planner-2", "claude-settings.json"),
+        "utf8",
+      ),
+    ) as { sandbox: { filesystem: { denyWrite: string[] } } };
+    expect(settings.sandbox.filesystem.denyWrite).toEqual([
+      "~/.claude",
+      "~/.config",
+      "~/.npmrc",
+      path.resolve(fileURLToPath(new URL("../../", import.meta.url))),
+      path.join(sessionsDir, "planner-2"),
+      path.resolve(sessionsDir),
+      path.resolve("/work/_temp"),
+    ]);
   });
 
   it("passes the Claude token but no GitHub or Actions token", async () => {

@@ -65,6 +65,9 @@ export interface ClaudeRunnerOptions {
   workspace: string;
   // Where the session files go, outside the workspace.
   sessionsDir: string;
+  // More directories of the job that sessions may not write, such as the
+  // runner's temporary directory with the job's git directory.
+  protect: readonly string[];
   baseline: OrgBaseline;
   token: string;
   sessions: Partial<Record<Role, RoleSession>>;
@@ -132,6 +135,7 @@ export class ClaudeRoleRunner implements RoleRunner {
       configText: input.config,
       baseline: options.baseline,
       out: dir,
+      protect: [options.sessionsDir, ...options.protect],
     });
     if (!files.ok) {
       throw new Error(`The run's configuration copy is invalid.`);

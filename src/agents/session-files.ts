@@ -8,6 +8,8 @@ import type { Role } from "../hooks/roles.ts";
 import { claudeSettings } from "./claude-settings.ts";
 
 const HOOK_CLI = fileURLToPath(new URL("../hooks/cli.ts", import.meta.url));
+// The checkout of this repository, whose code the hooks run.
+const PIPELINE_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const NODE_FLAGS = [
   "--experimental-strip-types",
   "--disable-warning=ExperimentalWarning",
@@ -22,6 +24,9 @@ export interface SessionSpec {
   baseline: OrgBaseline;
   // The session directory, outside the workspace.
   out: string;
+  // More directories of the job that the session may not write, such as the
+  // runner's temporary directory.
+  protect?: readonly string[];
 }
 
 export interface SessionFiles {
@@ -60,6 +65,11 @@ export async function writeSessionFiles(
     hookCommand: [process.execPath, ...NODE_FLAGS, HOOK_CLI],
     contextPath,
     allowedHosts: context.rules.allowed_hosts,
+    protectedPaths: [
+      path.resolve(PIPELINE_ROOT),
+      out,
+      ...(spec.protect ?? []).map((dir) => path.resolve(dir)),
+    ],
   });
   await mkdir(out, { recursive: true });
   await writeFile(contextPath, JSON.stringify(context, null, 2));
