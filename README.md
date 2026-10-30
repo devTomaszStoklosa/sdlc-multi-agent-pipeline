@@ -8,6 +8,7 @@ Specyfikacja pipeline'u, w którym wyspecjalizowani agenci AI przejmują GitHub 
 - [spec.md](spec.md): specyfikacja, czyli przebieg i maszyna stanów, agenci, bramki, bezpieczeństwo, hooki, konfiguracja repozytorium, ewaluacje, porównanie frameworków, metryki i rollout.
 - [plan.md](plan.md): plan techniczny MVP, czyli decyzje przy warunku zera kosztów, architektura, ochrona tokenu subskrypcji, przyrosty P0–P8, fazy po MVP i śledzenie wymagań.
 - [config/org-baseline.yml](config/org-baseline.yml): bazowy zestaw organizacji, czyli najłagodniejsze dopuszczalne wartości `.sdlc-agents.yml`, które repozytorium może tylko zaostrzyć (FR-10.2), oraz lista hostów sieciowych, której repozytorium nie zmienia.
+- [prompts](prompts): prompty ról i [roles.yml](prompts/roles.yml) z modelem i promptem każdej roli, wersjonowane razem (FR-5.8).
 
 ## Najważniejsze założenia
 
@@ -79,7 +80,7 @@ Stan przebiegu jest w ukrytym komentarzu GitHub App w issue ([src/core/run-store
 
 Ręczne uruchomienie workflow Orchestrate z numerem issue startuje przebieg czekający w kolejce, gdy nie ma innego aktywnego przebiegu, odbiera wynik bramek, który nie dotarł, a etap, którego job zakończył się bez wyniku, kieruje do `needs-human`.
 
-W P4 role są zaślepkami ([src/agents/stub-role.ts](src/agents/stub-role.ts)) i nie zużywają limitu planu Pro. Ich zachowanie ustala ukryty blok w treści issue, np.:
+Developer i Reviewer są do P6 i P7 zaślepkami ([src/agents/stub-role.ts](src/agents/stub-role.ts)) i nie zużywają limitu planu Pro. Ich zachowanie ustala ukryty blok w treści issue, np.:
 
 ```text
 <!-- sdlc-stub
@@ -96,7 +97,17 @@ cost_usd: 0.01                    # szacunek kosztu każdej sesji
 -->
 ```
 
-Bez bloku plan jest zwykły, bramki przechodzą, a Reviewer zwraca `approve`. Ostatni element listy obowiązuje dla kolejnych wystąpień.
+Bez bloku bramki przechodzą, a Reviewer zwraca `approve`. Ostatni element listy obowiązuje dla kolejnych wystąpień. Pola `plans` oraz wpisy `planner` w `failures` i `delay_seconds` działają tylko w testach, bo w repozytorium demo Planner pracuje na Claude Code.
+
+## Planner
+
+Planner działa w jobie roli jako sesja `claude -p` ([src/agents/claude-runner.ts](src/agents/claude-runner.ts)) z modelem i promptem z [prompts/roles.yml](prompts/roles.yml), narzędziami tylko do odczytu, limitem tur z kopii `.sdlc-agents.yml` przebiegu i hookami z [src/hooks](src/hooks). Prompt trafia na wejście standardowe, a plan wraca jako wynik ustrukturyzowany według schematu z [src/agents/planner/plan.ts](src/agents/planner/plan.ts) (`--json-schema`). Proces `claude` dostaje token Claude, ale żadnego tokenu GitHub ani Actions (rozdz. 3.2 planu).
+
+Kod joba przed sesją zbiera dane dla Plannera: issue, komentarze osób z prawem zapisu, wcześniejsze wersje planu, podsumowanie zatrzymania poprzedniego przebiegu i diff brancha jego otwartego PR (FR-4.28b). Wszystko to trafia do promptu jako niezaufane dane (SEC-8.5).
+
+Po sesji kod joba waliduje plan, klasyfikuje go i publikuje jako nowy komentarz z numerem wersji (FR-4.3, FR-4.6). Zmiana jest high-impact, gdy wskaże ją Planner albo któraś reguła z [src/agents/planner/high-impact.ts](src/agents/planner/high-impact.ts): manifest zależności, pliki CI, infrastruktury i konfiguracji bramek z `.sdlc-agents.yml`, `high_impact.extra_paths` albo limity plików i linii. Przed publikacją wersji high-impact job zdejmuje `plan:approved` (FR-4.5). Lista plików jest w bloku ` ```yaml sdlc-plan `, który czyta `parsePlanBlock`.
+
+Cienki workflow repozytorium demo przekazuje do `orchestrate.yml` sekret `CLAUDE_CODE_OAUTH_TOKEN` po nazwie, tak jak do `agent-trial.yml`. Joby ról instalują Claude Code i sandbox akcją [agent-setup](.github/actions/agent-setup/action.yml), a w podsumowaniu kroku publikują tylko podsumowania sesji, bez transkryptu.
 
 ## Autor
 

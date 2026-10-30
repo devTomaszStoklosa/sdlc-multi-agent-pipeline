@@ -1,3 +1,4 @@
+import type { PlannerBrief } from "../agents/planner/brief.ts";
 import {
   roleResultSchema,
   type RoleInput,
@@ -5,12 +6,13 @@ import {
   type RoleRunner,
   type RoleUsage,
 } from "../agents/role-runner.ts";
-import type { Run } from "../core/run-store/run-record.ts";
+import type { Run, RunRecord } from "../core/run-store/run-record.ts";
 import { roleOf } from "../core/state-machine/states.ts";
 import type { Role } from "../hooks/roles.ts";
 import { guardFor, type JobContext } from "./context.ts";
 import { RunInactiveError } from "./guard.ts";
 import { remainingMinutes, runLimits } from "./limits.ts";
+import { plannerBrief } from "./planner-brief.ts";
 import {
   AGENT_REVIEW,
   performFailure,
@@ -23,7 +25,31 @@ import { watchForStop, type Wait } from "./stop-watch.ts";
 export interface RoleJobContext extends JobContext {
   runner: RoleRunner;
   stopWatch: { intervalMs: number; wait: Wait };
+  // The pipeline's app, the author of its own comments.
+  appId: number;
 }
+
+type Brief = (
+  context: RoleJobContext,
+  record: RunRecord,
+) => Promise<PlannerBrief>;
+
+// What the job gathers for a role before its session (SEC-8.10). The other
+// roles get their context in P6 and P7.
+const BRIEFS: Partial<Record<Role, Brief>> = {
+  planner: (context, record) =>
+    plannerBrief(
+      {
+        comments: context.app.comments,
+        permissions: context.app.permissions,
+        pulls: context.read.pulls,
+        contents: context.app.contents,
+        appId: context.appId,
+        repository: context.repository,
+      },
+      record,
+    ),
+};
 
 const RETRYABLE = new Set(["infra", "usage-limit"]);
 const NO_USAGE: RoleUsage = {
@@ -168,6 +194,9 @@ async function watchedSession(
         reviewRound: run.progress.reviewRound,
         pushes: run.pushes,
         findings: run.progress.findings,
+        config: run.config.text,
+        maxTurns: limits.maxTurnsPerStage,
+        brief: scope.brief,
       },
       {
         retries: limits.stageRetries,
@@ -182,13 +211,15 @@ async function watchedSession(
 
 async function work(
   context: RoleJobContext,
-  issueNumber: number,
-  { run, role }: { run: Run; role: Role },
+  record: RunRecord,
+  role: Role,
 ): Promise<RoleJobOutput> {
-  const guard = guardFor(context, issueNumber, run.id);
+  const { run } = record;
+  const guard = guardFor(context, record.issue, run.id);
   await guard.ensure("role session", { state: run.progress.state });
-  const issue = await context.read.issues.getIssue(issueNumber);
-  const scope: EffectScope = { context, guard, run, issue };
+  const issue = await context.read.issues.getIssue(record.issue);
+  const brief = await BRIEFS[role]?.(context, record);
+  const scope: EffectScope = { context, guard, run, issue, brief };
   const { pushedSha } = run.progress;
   if (role === "reviewer" && pushedSha !== undefined) {
     scope.checkRunId = await guard.perform("agent-review start", () =>
@@ -214,15 +245,15 @@ export async function runRoleJob(
   issue: number,
   role: Role,
 ): Promise<RoleJobOutput> {
-  const run = (await context.store.read(issue))?.record.run;
-  if (run === undefined || !owns(run, role, context.workflowRunId)) {
+  const record = (await context.store.read(issue))?.record;
+  if (record === undefined || !owns(record.run, role, context.workflowRunId)) {
     return {
       status: "skipped",
       reason: `no ${role} stage of this workflow run`,
     };
   }
   try {
-    return await work(context, issue, { run, role });
+    return await work(context, record, role);
   } catch (error) {
     if (!(error instanceof RunInactiveError)) throw error;
     return { status: "skipped", reason: error.message };

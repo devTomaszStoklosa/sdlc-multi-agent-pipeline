@@ -29,8 +29,27 @@ function planner(scenario: Scenario, input: RoleInput): RoleOutput {
   return {
     role: "planner",
     plan: {
-      highImpact,
-      text: `Plan zaślepki (P4), wersja ${String(version)}, ${kind}.`,
+      summary: `Plan zaślepki, wersja ${String(version)}, ${kind}.`,
+      approach: "Zaślepka roli zwraca gotowy plan bez modelu.",
+      acceptance: [
+        {
+          criterion: "Przebieg przechodzi przez stany MVP",
+          how: "Zaślepki ról",
+        },
+      ],
+      files: [
+        {
+          path: `stub-runs/issue-${String(input.issue.number)}.json`,
+          change: "add",
+          why: "Zapisuje pushe zaślepki Developera.",
+        },
+      ],
+      testing: "Bramki repozytorium demo.",
+      estimatedChangedLines: 5,
+      highImpact: {
+        value: highImpact,
+        reasons: [`Scenariusz zaślepki: plan ${kind}.`],
+      },
     },
   };
 }

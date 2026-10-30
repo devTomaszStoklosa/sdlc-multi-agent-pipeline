@@ -1,9 +1,11 @@
+import type { PlannerBrief } from "../agents/planner/brief.ts";
 import type { RoleOutput, RoleResult } from "../agents/role-runner.ts";
 import type { Run } from "../core/run-store/run-record.ts";
 import { newStubBranch } from "./branch.ts";
 import type { JobContext } from "./context.ts";
 import type { RunGuard } from "./guard.ts";
-import { planComment, planUpdateComment } from "./messages.ts";
+import { planUpdateComment } from "./messages.ts";
+import { clearApproval, plannerEffects } from "./planner-effects.ts";
 import type { RoleOutcome } from "./role-output.ts";
 
 export const AGENT_REVIEW = "agent-review";
@@ -15,6 +17,8 @@ export interface EffectScope {
   issue: { number: number; title: string; body: string };
   // The in-progress `agent-review` check run of a Reviewer job.
   checkRunId?: number;
+  // What the job gathered for a Planner session.
+  brief?: PlannerBrief;
 }
 
 type Change = Extract<RoleOutput, { role: "developer" }>["change"];
@@ -89,6 +93,7 @@ async function developerEffects(
 ): Promise<RoleOutcome> {
   if (change.kind === "push") return push(scope, change);
   const version = scope.run.progress.planVersion + 1;
+  if (change.highImpact) await clearApproval(scope);
   await comment(scope, planUpdateComment(version, change.text));
   return { kind: "plan-update", version, highImpact: change.highImpact };
 }
@@ -100,11 +105,8 @@ export async function performOutput(
   output: RoleOutput,
 ): Promise<RoleOutcome> {
   switch (output.role) {
-    case "planner": {
-      const version = scope.run.progress.planVersion + 1;
-      await comment(scope, planComment(version, output.plan.text));
-      return { kind: "plan", version, highImpact: output.plan.highImpact };
-    }
+    case "planner":
+      return plannerEffects(scope, output.plan);
     case "developer":
       return developerEffects(scope, output.change);
     case "reviewer": {

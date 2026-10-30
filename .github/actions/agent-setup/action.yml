@@ -1,0 +1,20 @@
+name: Agent setup
+description: >-
+  The pinned Claude Code CLI and the sandbox of agent sessions (plan 3.4), for
+  jobs that run a role session on Claude Code.
+
+runs:
+  using: composite
+  steps:
+    # The Claude Code sandbox needs bubblewrap and socat, the hooks run
+    # project commands in bubblewrap, and Ubuntu 24.04 blocks the
+    # unprivileged user namespaces that bubblewrap uses.
+    - name: Install Claude Code and the sandbox
+      shell: bash
+      env:
+        CLAUDE_CODE_VERSION: 2.1.312
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes bubblewrap socat
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"

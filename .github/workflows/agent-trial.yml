@@ -34,9 +34,6 @@ on:
 permissions:
   contents: read
 
-env:
-  CLAUDE_CODE_VERSION: 2.1.312
-
 jobs:
   trial:
     runs-on: ubuntu-24.04
@@ -79,15 +76,7 @@ jobs:
         with:
           node-version-file: pipeline/.nvmrc
 
-      # The Claude Code sandbox needs bubblewrap and socat, the hooks run
-      # project commands in bubblewrap, and Ubuntu 24.04 blocks the
-      # unprivileged user namespaces that bubblewrap uses.
-      - name: Install Claude Code and the sandbox
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes bubblewrap socat
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      - uses: ./pipeline/.github/actions/agent-setup
 
       - name: Install dependencies
         run: |

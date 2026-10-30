@@ -5,6 +5,7 @@
 // Tokens and paths come from the environment, never from arguments, so they
 // do not appear in the process list. Exit codes: 0 done, 1 failed, 2 usage.
 import { parseArgs } from "node:util";
+import type { RoleRunner } from "../agents/role-runner.ts";
 import { StubRoleRunner } from "../agents/stub-role.ts";
 import { JsonlRunEventLog } from "../audit/run-events.ts";
 import { CommentRunStateStore } from "../core/run-store/comment-store.ts";
@@ -31,6 +32,7 @@ import {
 import {
   appId,
   artifactEvents,
+  claudeRunner,
   env,
   github,
   githubEvent,
@@ -98,8 +100,19 @@ async function decideCommand(given: Args): Promise<void> {
   await setOutputs({ role: result.role ?? "" });
 }
 
+const stub = () => Promise.resolve(new StubRoleRunner());
+
+// The Planner runs on Claude Code; the Developer and the Reviewer stay stubs
+// until P6 and P7.
+const RUNNERS: Record<Role, () => Promise<RoleRunner>> = {
+  planner: claudeRunner,
+  developer: stub,
+  reviewer: stub,
+};
+
 // The role job reads the state with its read-only token and writes none.
 async function roleCommand(given: Args): Promise<void> {
+  const role = roleOf(given);
   const context = await jobContext(TOKENS);
   const read = github(TOKENS.read);
   const store = new CommentRunStateStore(read.comments, appId());
@@ -107,11 +120,12 @@ async function roleCommand(given: Args): Promise<void> {
     {
       ...context,
       store,
-      runner: new StubRoleRunner(),
+      runner: await RUNNERS[role](),
       stopWatch: { intervalMs: STOP_WATCH_MS, wait },
+      appId: appId(),
     },
     given.issue,
-    roleOf(given),
+    role,
   );
   console.log(`Role job: ${output.status}`);
   await setOutputs({ output: JSON.stringify(output) });

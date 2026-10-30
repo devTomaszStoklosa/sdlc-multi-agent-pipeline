@@ -17,6 +17,8 @@ function input(
     pushes: 0,
     findings: [],
     attempt: 1,
+    config: "",
+    maxTurns: 50,
     ...rest,
   };
 }
@@ -40,7 +42,7 @@ describe("StubRoleRunner", () => {
   it("defaults to a normal plan, a passing push and approve", async () => {
     expect(await run(input("planner", ""))).toMatchObject({
       status: "ok",
-      output: { plan: { highImpact: false } },
+      output: { plan: { highImpact: { value: false } } },
     });
     const push = await run(input("developer", ""));
     expect(push).toMatchObject({
@@ -55,8 +57,12 @@ describe("StubRoleRunner", () => {
     const body = scenario("plans: [high-impact, normal]");
     const first = await run(input("planner", body));
     const second = await run(input("planner", body, { planVersion: 1 }));
-    expect(first).toMatchObject({ output: { plan: { highImpact: true } } });
-    expect(second).toMatchObject({ output: { plan: { highImpact: false } } });
+    expect(first).toMatchObject({
+      output: { plan: { highImpact: { value: true } } },
+    });
+    expect(second).toMatchObject({
+      output: { plan: { highImpact: { value: false } } },
+    });
   });
 
   it("writes unformatted JSON for a push that fails the gates", async () => {

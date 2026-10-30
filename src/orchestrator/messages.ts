@@ -49,10 +49,6 @@ export function escalation(run: Run, reason: EscalationReason): string {
   return `Przebieg ${run.id} wymaga decyzji człowieka: ${reasonText(reason)}. Zdejmij etykietę \`${run.labels.needs_human}\`, żeby wznowić przebieg od stanu \`${resume}\` (FR-4.32), albo dodaj \`${STOP_LABEL}\`, żeby go zatrzymać.`;
 }
 
-export function planComment(version: number, text: string): string {
-  return `### Plan, wersja ${String(version)}\n\n${text}`;
-}
-
 export function planUpdateComment(version: number, text: string): string {
   return `### Aktualizacja planu, wersja ${String(version)}\n\n${text}`;
 }

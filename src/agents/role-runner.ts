@@ -1,8 +1,10 @@
 import { z } from "zod";
 import type { Role } from "../hooks/roles.ts";
+import type { PlannerBrief } from "./planner/brief.ts";
+import { planSchema } from "./planner/plan.ts";
 
-// What a role session gets (plan 3.4). From P5 on, a session also gets the
-// workspace; the stubs of P4 need only these facts.
+// What a role session gets (plan 3.4). A session also gets the workspace,
+// which the runner knows; the stubs need only these facts.
 export interface RoleInput {
   role: Role;
   issue: { number: number; title: string; body: string };
@@ -13,6 +15,11 @@ export interface RoleInput {
   findings: readonly string[];
   // 1 for the first attempt of the stage, more for its retries (FR-4.30).
   attempt: number;
+  // The run's .sdlc-agents.yml copy (FR-10.5) and the turn limit of a stage.
+  config: string;
+  maxTurns: number;
+  // What the job gathered for the Planner (FR-4.28b, SEC-8.10).
+  brief?: PlannerBrief;
 }
 
 const count = z.number().int().min(0);
@@ -26,7 +33,7 @@ export const usageSchema = z.strictObject({
 
 const plannerOutput = z.strictObject({
   role: z.literal("planner"),
-  plan: z.strictObject({ highImpact: z.boolean(), text: z.string().min(1) }),
+  plan: planSchema,
 });
 
 const developerOutput = z.strictObject({
