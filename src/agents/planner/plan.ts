@@ -135,5 +135,7 @@ function planChecks(plan: Plan, issues: Issues): void {
 
 export const planSchema = planShape.superRefine(planChecks);
 
-// The JSON Schema of the session's structured output.
-export const planJsonSchema = z.toJSONSchema(planShape);
+// The JSON Schema of the session's structured output. Claude Code checks
+// `--json-schema` with Ajv's default draft, which does not know the 2020-12
+// meta-schema that zod names by default.
+export const planJsonSchema = z.toJSONSchema(planShape, { target: "draft-7" });

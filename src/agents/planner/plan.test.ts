@@ -45,6 +45,12 @@ describe("planSchema", () => {
     });
     expect(text).not.toMatch(/maxLength|minLength|pattern|minItems/);
   });
+
+  it("names the draft that Claude Code checks --json-schema against", () => {
+    expect(planJsonSchema.$schema).toBe(
+      "http://json-schema.org/draft-07/schema#",
+    );
+  });
 });
 
 describe("isRepositoryPath", () => {
