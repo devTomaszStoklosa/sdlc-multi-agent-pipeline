@@ -1,5 +1,6 @@
 import type { GitHub } from "./client.ts";
 import type {
+  ChangedFile,
   CheckConclusion,
   CheckOutput,
   CheckRunsPort,
@@ -57,6 +58,8 @@ export class FakeGitHub
   readonly runs = new Map<number, FakeRun>();
   readonly branches = new Map<string, string>([["main", "0000000"]]);
   readonly files = new Map<string, string>();
+  // The files each branch changes against `main`, by branch name.
+  readonly diffs = new Map<string, ChangedFile[]>();
   readonly writes: string[] = [];
   // Whether a write by the app counts as a comment of the app.
   commentAppId: number | undefined = this.appId;
@@ -303,6 +306,10 @@ export class FakeGitHub
       name: "main",
       sha: this.branches.get("main") ?? "",
     });
+  }
+
+  compare(_base: string, head: string): Promise<ChangedFile[]> {
+    return Promise.resolve(this.diffs.get(head) ?? []);
   }
 
   readFile(path: string, ref: string): Promise<string | undefined> {

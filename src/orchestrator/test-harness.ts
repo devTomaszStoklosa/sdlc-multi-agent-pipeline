@@ -1,5 +1,6 @@
 // A demo repository in memory for the orchestrator tests: it runs the jobs of
 // orchestrate.yml in their order on the in-memory GitHub, with the stub roles.
+import type { RoleRunner } from "../agents/role-runner.ts";
 import { StubRoleRunner } from "../agents/stub-role.ts";
 import { MemoryRunEventLog } from "../audit/run-events.ts";
 import { BASELINE } from "../config/fixtures.ts";
@@ -29,6 +30,8 @@ export class Harness {
   readonly github: FakeGitHub;
   readonly log = new MemoryRunEventLog();
   readonly store: CommentRunStateStore;
+  // The roles of the role jobs; tests may replace them.
+  runner: RoleRunner = new StubRoleRunner(() => Promise.resolve());
   private time = new Date("2026-10-29T10:00:00Z");
   private nextRun = 100;
 
@@ -71,7 +74,8 @@ export class Harness {
       now: () => this.time,
       workflowRunId,
       gatesWorkflow: "Gates",
-      runner: new StubRoleRunner(() => Promise.resolve()),
+      runner: this.runner,
+      appId: this.github.appId,
       // Checks between the steps of a test, as the sessions here take no time.
       stopWatch: {
         intervalMs: 0,

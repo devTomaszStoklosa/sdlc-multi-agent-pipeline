@@ -1,5 +1,5 @@
 import { parseRepoConfig } from "../config/parse.ts";
-import { resolvePolicy } from "../config/policy.ts";
+import { resolvePolicy, type EffectiveConfig } from "../config/policy.ts";
 import type { OrgBaseline } from "../config/schema.ts";
 import type { Run } from "../core/run-store/run-record.ts";
 import type { LimitName } from "../core/state-machine/events.ts";
@@ -13,15 +13,19 @@ export interface RunLimits {
   maxTurnsPerStage: number;
 }
 
-// The limits of a run come from its configuration copy merged with the
-// current organization baseline (FR-10.5): a change of .sdlc-agents.yml during
-// the run does not apply, a tightened baseline applies at once.
-export function runLimits(run: Run, baseline: OrgBaseline): RunLimits {
+// The configuration of a run is its copy merged with the current organization
+// baseline (FR-10.5): a change of .sdlc-agents.yml during the run does not
+// apply, a tightened baseline applies at once.
+export function runConfig(run: Run, baseline: OrgBaseline): EffectiveConfig {
   const parsed = parseRepoConfig(run.config.text);
   if (!parsed.ok) {
     throw new Error(`The configuration copy of run ${run.id} is invalid.`);
   }
-  const { limits, review } = resolvePolicy(parsed.value, baseline).effective;
+  return resolvePolicy(parsed.value, baseline).effective;
+}
+
+export function runLimits(run: Run, baseline: OrgBaseline): RunLimits {
+  const { limits, review } = runConfig(run, baseline);
   return {
     maxReviewRounds: review.max_rounds,
     stageRetries: limits.stage_retries,

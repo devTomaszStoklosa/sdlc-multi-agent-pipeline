@@ -3,6 +3,7 @@ import { hasStatus, RepoApi, type Repo } from "./octokit-issues.ts";
 import type {
   CheckConclusion,
   CheckOutput,
+  ChangedFile,
   CheckRunsPort,
   ContentsPort,
   FileChange,
@@ -119,6 +120,19 @@ export class GitHubContents extends RepoApi implements ContentsPort {
       branch: repository.default_branch,
     });
     return { name: branch.name, sha: branch.commit.sha };
+  }
+
+  async compare(base: string, head: string): Promise<ChangedFile[]> {
+    const { data } = await this.octokit.rest.repos.compareCommitsWithBasehead({
+      ...this.repo,
+      basehead: `${base}...${head}`,
+    });
+    return (data.files ?? []).map((file) => ({
+      path: file.filename,
+      additions: file.additions,
+      deletions: file.deletions,
+      patch: file.patch,
+    }));
   }
 
   async readFile(path: string, ref: string): Promise<string | undefined> {

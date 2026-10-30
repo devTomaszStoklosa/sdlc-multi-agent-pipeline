@@ -4,6 +4,10 @@ import { appendFile, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
+import { ClaudeRoleRunner, spawnProcess } from "../agents/claude-runner.ts";
+import { plannerSession } from "../agents/planner/session.ts";
+import type { RoleRunner } from "../agents/role-runner.ts";
+import { loadRoleSettings } from "../agents/roles-config.ts";
 import {
   JsonlRunEventLog,
   parseRunEvents,
@@ -87,6 +91,21 @@ export async function jobContext(tokens: Tokens): Promise<JobContext> {
     now: () => new Date(),
     workflowRunId: Number(env("GITHUB_RUN_ID")),
   };
+}
+
+// The roles on Claude Code. The job checks out the connected repository into
+// SDLC_WORKSPACE and keeps the session files in SDLC_SESSIONS_DIR, outside it.
+export async function claudeRunner(): Promise<RoleRunner> {
+  return new ClaudeRoleRunner({
+    workspace: env("SDLC_WORKSPACE"),
+    sessionsDir: env("SDLC_SESSIONS_DIR"),
+    baseline: await loadBaseline(),
+    token: env("CLAUDE_CODE_OAUTH_TOKEN"),
+    sessions: { planner: plannerSession },
+    settings: loadRoleSettings,
+    runProcess: spawnProcess,
+    parentEnv: process.env,
+  });
 }
 
 export async function wait(ms: number, signal?: AbortSignal): Promise<void> {

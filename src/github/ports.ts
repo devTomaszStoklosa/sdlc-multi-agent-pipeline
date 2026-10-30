@@ -123,8 +123,19 @@ export interface FileChange {
   message: string;
 }
 
+export interface ChangedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  // The unified diff of the file; GitHub leaves it out for large or binary
+  // files.
+  patch?: string;
+}
+
 export interface ContentsPort {
   defaultBranch(): Promise<{ name: string; sha: string }>;
+  // The files that `head` changes since its merge base with `base`.
+  compare(base: string, head: string): Promise<ChangedFile[]>;
   readFile(path: string, ref: string): Promise<string | undefined>;
   branchExists(name: string): Promise<boolean>;
   createBranch(name: string, sha: string): Promise<void>;

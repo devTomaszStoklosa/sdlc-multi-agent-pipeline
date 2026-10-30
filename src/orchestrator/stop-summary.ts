@@ -60,6 +60,11 @@ function usage(facts: StopFacts): string {
   return `${minutes} z ${String(facts.limits.maxMinutes)} min w stanach pracy, ${cost} z ${String(facts.limits.maxCostUsd)} USD (szacunek zużycia, nie wydatek)`;
 }
 
+// The first line of a stop summary, by which a later run finds it (FR-4.28b).
+export function stopSummaryHeading(runId: string): string {
+  return `### Przebieg ${runId} zatrzymany`;
+}
+
 // The one comment of a stopped run (FR-4.28f), built from the run state and
 // the event log without a model.
 export function stopSummary(facts: StopFacts): string {
@@ -67,7 +72,7 @@ export function stopSummary(facts: StopFacts): string {
   const where = facts.where === "pr" ? "w PR" : "w issue";
   const findings = run.progress.findings;
   return [
-    `### Przebieg ${run.id} zatrzymany`,
+    stopSummaryHeading(run.id),
     "",
     line(
       "Zatrzymał",
