@@ -121,10 +121,11 @@ export function toRoleResult(
   if (result.is_error === true || result.subtype !== "success") {
     return errorOf(result);
   }
+  // The keys, not the values, show what the CLI returned instead.
   if (result.structured_output === undefined) {
     return failed(
       "infra",
-      "The session returned no structured output.",
+      `The session returned no structured output (result keys: ${Object.keys(result).sort().join(", ")}).`,
       result,
     );
   }

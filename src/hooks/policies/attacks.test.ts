@@ -30,6 +30,7 @@ const ATTACKS: Record<BlockCategory, [string, Case][]> = {
     ["Bash", [".. by the Reviewer (SEC-9.7)", bash("ls"), "reviewer"]],
     ["Write", [".. by the Planner", { file_path: "plan.md" }, "planner"]],
     ["mcp__github__merge", ["an unknown tool", {}]],
+    ["StructuredOutputs", ["a tool named like the result tool", {}]],
     [
       "Write",
       ["outside the workspace (SEC-9.1)", { file_path: "/etc/passwd" }],
@@ -166,6 +167,11 @@ const ALLOWED: [string, Case][] = [
     ["a search for the Planner", { pattern: "x", path: "src" }, "planner"],
   ],
   ["Glob", ["a file listing", { pattern: "**/*.ts" }]],
+  [
+    "StructuredOutput",
+    ["the Planner's result", { summary: "x", files: [] }, "planner"],
+  ],
+  ["StructuredOutput", ["the Reviewer's result", { verdict: "x" }, "reviewer"]],
   ["Read", ["an example env file name", { file_path: "docs/env.md" }]],
   ["Write", ["a new file", { file_path: "src/b.ts", content: "x" }]],
   ["Edit", ["an existing file", { file_path: "src/a.ts" }]],

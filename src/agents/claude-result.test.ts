@@ -83,7 +83,8 @@ describe("toRoleResult", () => {
     ).toMatchObject({
       status: "failed",
       failure: "infra",
-      message: "The session returned no structured output.",
+      message:
+        "The session returned no structured output (result keys: is_error, num_turns, subtype, total_cost_usd, type, usage).",
     });
   });
 
