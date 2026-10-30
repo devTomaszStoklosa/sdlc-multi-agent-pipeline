@@ -9,10 +9,13 @@ name: Orchestrate
 # at most two roles, because after the Planner and after `changes_requested`
 # the Developer follows without any GitHub event.
 #
-# No job has the Claude Code token: the roles of P4 are stubs. Each job that
-# writes gets a GitHub App token narrowed to its scope in src/orchestrator/scopes.ts,
-# and every scope there names a permission, because a token request without
-# any permission input inherits all permissions of the app.
+# Only the role jobs, in the `agents` environment, get the Claude Code token,
+# and only the session process receives it (plan 4). The Planner runs on
+# Claude Code; the Developer and the Reviewer stay stubs until P6 and P7.
+# Each job that writes gets a GitHub App token narrowed to its scope in
+# src/orchestrator/scopes.ts, and every scope there names a permission,
+# because a token request without any permission input inherits all
+# permissions of the app.
 on:
   workflow_call:
     inputs:
@@ -33,9 +36,15 @@ on:
         required: false
         type: string
         default: Gates
+    # The caller passes the Claude Code token by name, although it exists only
+    # in the `agents` environment: an environment secret that the caller does
+    # not pass is an empty string here.
     secrets:
       APP_PRIVATE_KEY:
         description: Private key of the pipeline's GitHub App.
+        required: true
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: The Claude Code token from the caller's `agents` environment.
         required: true
 
 permissions:
@@ -134,6 +143,7 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       ROLE: ${{ needs.decide.outputs.role }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role.jsonl
+      SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -142,6 +152,16 @@ jobs:
           path: pipeline
           persist-credentials: false
       - uses: ./pipeline/.github/actions/pipeline-setup
+      - uses: ./pipeline/.github/actions/agent-setup
+      # The session reads the main branch of the calling repository. Its
+      # files stay outside this checkout, so the agent cannot change its own
+      # hooks (plan 3.4).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: workspace
+          persist-credentials: false
+      - run: echo "SDLC_SESSIONS_DIR=$RUNNER_TEMP/agent-sessions" >> "$GITHUB_ENV"
       - id: scope
         run: npm run --silent --prefix pipeline orchestrator -- scopes --role "$ROLE"
       - id: token
@@ -157,7 +177,26 @@ jobs:
         env:
           SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
           SDLC_READ_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: npm run --silent --prefix pipeline orchestrator -- role --issue "$ISSUE" --role "$ROLE"
+      # Summaries of the sessions for the public log, never a transcript.
+      - name: Summarize the sessions
+        if: always()
+        run: |
+          shopt -s nullglob
+          for dir in "$SDLC_SESSIONS_DIR"/*/; do
+            echo "# Session: $(basename "$dir")"
+            npm run --silent --prefix pipeline session-summary -- --result "$dir/result.json" --audit "$dir/audit/tool-calls.jsonl"
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+      # The files stay on the runner, but a token in them would mean that it
+      # reached the model or the audit log.
+      - name: Check the session files for the token
+        if: always()
+        run: |
+          if [ -d "$SDLC_SESSIONS_DIR" ] && grep -rqE 'sk-ant-[A-Za-z0-9_-]{8,}' "$SDLC_SESSIONS_DIR"; then
+            echo "::error::A Claude token shape appears in the session files."
+            exit 1
+          fi
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -229,6 +268,7 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       ROLE: ${{ needs.advance.outputs.role }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role-2.jsonl
+      SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -237,6 +277,16 @@ jobs:
           path: pipeline
           persist-credentials: false
       - uses: ./pipeline/.github/actions/pipeline-setup
+      - uses: ./pipeline/.github/actions/agent-setup
+      # The session reads the main branch of the calling repository. Its
+      # files stay outside this checkout, so the agent cannot change its own
+      # hooks (plan 3.4).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: workspace
+          persist-credentials: false
+      - run: echo "SDLC_SESSIONS_DIR=$RUNNER_TEMP/agent-sessions" >> "$GITHUB_ENV"
       - id: scope
         run: npm run --silent --prefix pipeline orchestrator -- scopes --role "$ROLE"
       - id: token
@@ -252,7 +302,26 @@ jobs:
         env:
           SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
           SDLC_READ_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: npm run --silent --prefix pipeline orchestrator -- role --issue "$ISSUE" --role "$ROLE"
+      # Summaries of the sessions for the public log, never a transcript.
+      - name: Summarize the sessions
+        if: always()
+        run: |
+          shopt -s nullglob
+          for dir in "$SDLC_SESSIONS_DIR"/*/; do
+            echo "# Session: $(basename "$dir")"
+            npm run --silent --prefix pipeline session-summary -- --result "$dir/result.json" --audit "$dir/audit/tool-calls.jsonl"
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+      # The files stay on the runner, but a token in them would mean that it
+      # reached the model or the audit log.
+      - name: Check the session files for the token
+        if: always()
+        run: |
+          if [ -d "$SDLC_SESSIONS_DIR" ] && grep -rqE 'sk-ant-[A-Za-z0-9_-]{8,}' "$SDLC_SESSIONS_DIR"; then
+            echo "::error::A Claude token shape appears in the session files."
+            exit 1
+          fi
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
