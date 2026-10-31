@@ -59,7 +59,7 @@ Hooki z rozdz. 9.2 specyfikacji są w [src/hooks](src/hooks). Claude Code urucha
 - `PreToolUse`: każda reguła to osobna polityka w [src/hooks/policies](src/hooks/policies). Blokada kończy hook kodem 2 i trafia do logu audytowego z kategorią z M-E01. Hook nigdy nie odpowiada „allow”, więc reguły uprawnień Claude Code nadal działają.
 - `PostToolUse`: redakcja sekretów w wyniku narzędzia, formatter i linter na zapisanym pliku, log audytowy wywołań w JSONL.
 - `PostToolUseFailure`: log audytowy wywołań, które się nie powiodły.
-- `Stop`: Developer nie kończy pracy, dopóki nie przechodzą `commands.lint` i `commands.test`.
+- `Stop`: Developer nie kończy pracy, dopóki nie przechodzą `commands.lint` i `commands.test`. Decyzja trafia do logu audytowego, a podsumowanie sesji liczy ją osobno.
 - Każdy błąd, niepoprawne wejście albo przekroczenie czasu blokuje akcję albo wstrzymuje wynik narzędzia. Proces, który nie wystartuje, blokuje akcję dzięki ustawieniu `onFailure: "block"`.
 
 Polecenia projektu (formatter, linter, testy) hooki uruchamiają w [bubblewrap](https://github.com/containers/bubblewrap) bez sieci, bez widoku innych procesów i z zapisem tylko w przestrzeni roboczej, bo te polecenia wykonują kod zmieniany przez agenta (rozdz. 3.4 planu). Testy tej izolacji działają tylko na Linuksie z `bwrap`. Lokalnie są pomijane, a w CI (`REQUIRE_SANDBOX=1`) nie mogą być pominięte.
@@ -111,11 +111,11 @@ Po sesji kod joba waliduje plan, klasyfikuje go i publikuje jako nowy komentarz 
 
 Developer działa w jobie roli jako sesja `claude -p` z modelem i promptem z [prompts/roles.yml](prompts/roles.yml), narzędziami do odczytu, edycji i poleceń powłoki w sandboxie oraz hookami z [src/hooks](src/hooks). Sandbox nie pozwala poleceniom zapisywać w kodzie pipeline'u, w katalogu sesji ani w `$RUNNER_TEMP`, które leżą obok przestrzeni roboczej w katalogu domowym runnera. Sesja nie commituje i nie pushuje: zostawia zmiany w przestrzeni roboczej i zwraca według schematu z [src/agents/developer/work.ts](src/agents/developer/work.ts) typ i temat commita, podsumowanie, issue spoza zakresu i opcjonalną aktualizację planu.
 
-Przed sesją kod joba przenosi `.git` checkoutu do własnego katalogu w `$RUNNER_TEMP` ([src/git](src/git)), a sesji zostawia kopię. Polecenia git joba działają na tym katalogu bez konfiguracji systemowej, globalnej i hooków, więc nic, co zapisała sesja, nie uruchamia się w jobie z tokenami. Job przełącza przestrzeń roboczą na branch przebiegu, a w pierwszym etapie przebiegu, który kontynuuje otwarty PR, scala do niego `main` i zostawia konflikty sesji (FR-4.28b). Sesja dostaje bieżącą wersję planu i końcówki logów niezaliczonych jobów bramek ostatniego pushu (FR-4.12).
+Przed sesją kod joba przenosi `.git` checkoutu do własnego katalogu w `$RUNNER_TEMP` ([src/git](src/git)), a sesji zostawia kopię. Polecenia git joba działają na tym katalogu bez konfiguracji systemowej, globalnej i hooków, więc nic, co zapisała sesja, nie uruchamia się w jobie z tokenami. Job przełącza przestrzeń roboczą na branch przebiegu, a w pierwszym etapie przebiegu, który kontynuuje otwarty PR, scala do niego `main` i zostawia konflikty sesji (FR-4.28b). Potem instaluje zależności poleceniem `commands.install` w bubblewrap z siecią, ale bez tokenów joba i bez widoku innych procesów, bo sandbox sesji montuje `node_modules/.bin` tylko do odczytu. Sesja dostaje bieżącą wersję planu i końcówki logów niezaliczonych jobów bramek ostatniego pushu (FR-4.12).
 
 Po sesji kod joba ([src/orchestrator/developer-effects.ts](src/orchestrator/developer-effects.ts)):
 
-1. commituje zmiany z komunikatem Conventional Commits z numerem issue, który składa sam (FR-4.9);
+1. usuwa puste pliki, które sandbox sesji tworzy w przestrzeni roboczej jako punkty montowania chronionych ścieżek ([src/git/sandbox-placeholders.ts](src/git/sandbox-placeholders.ts)), i commituje zmiany z komunikatem Conventional Commits z numerem issue, który składa sam (FR-4.9);
 2. odrzuca branch z niepoprawionymi konfliktami, zagnieżdżonymi repozytoriami, ścieżkami z `hooks.deny_paths` albo ponad 200 zmienionymi plikami;
 3. publikuje aktualizację planu jako nową wersję z powodem i pełną listą plików (FR-4.11). Wersja high-impact zdejmuje `plan:approved` i czeka na akceptację bez pushu;
 4. zakłada issue spoza zakresu (FR-4.10);
