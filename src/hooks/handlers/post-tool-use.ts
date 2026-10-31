@@ -11,6 +11,7 @@ import {
   toolCallRecord,
   type HookDependencies,
 } from "./dependencies.ts";
+import { installPlannedDependencies } from "./dependency-install.ts";
 
 // Runs the formatter and then the linter on a file the agent has just written,
 // so the agent sees the problems at once (QG-9.9).
@@ -32,15 +33,24 @@ async function checkWrittenFile(
 }
 
 // Removes secrets from the tool output before the model sees it (SEC-9.10),
-// sends formatter and linter errors back to the agent (QG-9.9) and logs the
-// call (NFR-9.11).
+// sends formatter and linter errors back to the agent (QG-9.9), installs the
+// dependencies of a planned manifest (#49) and logs the call (NFR-9.11).
 export async function handlePostToolUse(
   event: PostToolUseEvent,
   context: HookContext,
   dependencies: HookDependencies,
 ): Promise<HookResponse> {
   const output = redactValue(event.tool_response);
-  const problems = await checkWrittenFile(event, context, dependencies);
+  const checks = await checkWrittenFile(event, context, dependencies);
+  const install = await installPlannedDependencies(
+    event,
+    context,
+    dependencies,
+  );
+  const problems = [
+    checks,
+    install.kind === "failed" ? install.problem : undefined,
+  ].filter((problem) => problem !== undefined);
   await dependencies.log.append(
     toolCallRecord(event, context, dependencies.now(), {
       decision: "allowed",
@@ -49,11 +59,17 @@ export async function handlePostToolUse(
     }),
   );
   const answer = {
-    ...(problems === undefined
+    ...(problems.length === 0
       ? {}
-      : { decision: "block", reason: redactText(problems).value }),
+      : {
+          decision: "block",
+          reason: redactText(problems.join("\n\n")).value,
+        }),
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
+      ...(install.kind === "installed"
+        ? { additionalContext: install.note }
+        : {}),
       ...(output.count > 0 ? { updatedToolOutput: output.value } : {}),
     },
   };

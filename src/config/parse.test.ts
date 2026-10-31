@@ -10,6 +10,7 @@ version: 1
 
 commands:
   install: "npm ci"
+  update_lockfile: "npm install --ignore-scripts"
   build: "npm run build"
   test: "npm test"
   lint: "npm run lint"

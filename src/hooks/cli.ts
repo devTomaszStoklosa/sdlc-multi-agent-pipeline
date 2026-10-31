@@ -30,6 +30,11 @@ async function handle(
       context.workspace,
       event.commandTimeoutMs,
     ),
+    installer: new SandboxedCommandRunner(
+      context.workspace,
+      event.installTimeoutMs,
+      true,
+    ),
     now: () => new Date(),
   };
   return event.handle(JSON.parse(rawInput), context, dependencies);

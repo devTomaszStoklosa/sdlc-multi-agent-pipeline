@@ -31,7 +31,7 @@ class FakeRunner implements CommandRunner {
   }
 }
 
-function dependencies(runner = new FakeRunner()) {
+function dependencies(runner = new FakeRunner(), installer = new FakeRunner()) {
   const records: ToolCallRecord[] = [];
   const deps: HookDependencies = {
     log: {
@@ -41,9 +41,10 @@ function dependencies(runner = new FakeRunner()) {
       },
     },
     runner,
+    installer,
     now: () => NOW,
   };
-  return { deps, records, runner };
+  return { deps, records, runner, installer };
 }
 
 const toolEvent = (tool_name: string, tool_input: Record<string, unknown>) => ({
@@ -154,6 +155,65 @@ describe("handlePostToolUse", () => {
     expect(answer.decision).toBe("block");
     expect(answer.reason).toContain("linter");
     expect(answer.reason).not.toContain(TOKEN);
+  });
+});
+
+describe("handlePostToolUse with planned dependency manifests (#49)", () => {
+  const INSTALL = "npm install --ignore-scripts";
+  const planned = () => ({
+    ...hookContext(),
+    dependencies: { command: INSTALL, manifests: ["package.json"] },
+  });
+
+  type Answer = {
+    decision?: string;
+    reason?: string;
+    hookSpecificOutput: { additionalContext?: string };
+  };
+
+  it("installs the dependencies after a write to a planned manifest", async () => {
+    const { deps, installer } = dependencies();
+    const event = postEvent(
+      "Edit",
+      { file_path: "/work/repo/package.json" },
+      {},
+    );
+    const answer = JSON.parse(
+      (await handlePostToolUse(event, planned(), deps)).stdout ?? "",
+    ) as Answer;
+    expect(installer.calls).toEqual([[INSTALL, []]]);
+    expect(answer.decision).toBeUndefined();
+    expect(answer.hookSpecificOutput.additionalContext).toBe(
+      "The pipeline installed the dependencies of package.json and updated the lockfile.",
+    );
+  });
+
+  it("installs nothing after other files, reads or without a plan's manifest", async () => {
+    const { deps, installer } = dependencies();
+    const calls = [
+      [postEvent("Edit", { file_path: "src/a.ts" }, {}), planned()],
+      [postEvent("Read", { file_path: "package.json" }, {}), planned()],
+      [postEvent("Write", { file_path: "web/package.json" }, {}), planned()],
+      [postEvent("Edit", { file_path: "package.json" }, {}), hookContext()],
+    ] as const;
+    for (const [event, context] of calls) {
+      await handlePostToolUse(event, context, deps);
+    }
+    expect(installer.calls).toEqual([]);
+  });
+
+  it("sends a failed install back to the agent, redacted", async () => {
+    const { deps } = dependencies(new FakeRunner(), new FakeRunner([INSTALL]));
+    const event = postEvent("Write", { file_path: "package.json" }, {});
+    const answer = JSON.parse(
+      (await handlePostToolUse(event, planned(), deps)).stdout ?? "",
+    ) as Answer;
+    expect(answer.decision).toBe("block");
+    expect(answer.reason).toContain(
+      `The dependency install (${INSTALL}) failed`,
+    );
+    expect(answer.reason).not.toContain(TOKEN);
+    expect(answer.hookSpecificOutput.additionalContext).toBeUndefined();
   });
 });
 

@@ -22,6 +22,8 @@ export interface HookEvent {
   timeoutSeconds: number;
   // The limit for each project command the hook runs.
   commandTimeoutMs: number;
+  // The limit for the dependency install after a manifest write (#49).
+  installTimeoutMs: number;
   handle(
     input: unknown,
     context: HookContext,
@@ -41,6 +43,7 @@ export const HOOK_EVENTS: ReadonlyMap<string, HookEvent> = new Map([
       name: "PreToolUse",
       timeoutSeconds: 15,
       commandTimeoutMs: 0,
+      installTimeoutMs: 0,
       handle: (input, context, dependencies) =>
         handlePreToolUse(
           preToolUseEvent.parse(input),
@@ -54,8 +57,11 @@ export const HOOK_EVENTS: ReadonlyMap<string, HookEvent> = new Map([
     "post-tool-use",
     {
       name: "PostToolUse",
-      timeoutSeconds: 150,
+      // The formatter, the linter and a dependency install, one after
+      // another, within the hook timeout.
+      timeoutSeconds: 330,
       commandTimeoutMs: 60_000,
+      installTimeoutMs: 180_000,
       handle: (input, context, dependencies) =>
         handlePostToolUse(postToolUseEvent.parse(input), context, dependencies),
     },
@@ -66,6 +72,7 @@ export const HOOK_EVENTS: ReadonlyMap<string, HookEvent> = new Map([
       name: "PostToolUseFailure",
       timeoutSeconds: 15,
       commandTimeoutMs: 0,
+      installTimeoutMs: 0,
       handle: (input, context, dependencies) =>
         handlePostToolUseFailure(
           postToolUseFailureEvent.parse(input),
@@ -80,6 +87,7 @@ export const HOOK_EVENTS: ReadonlyMap<string, HookEvent> = new Map([
       name: "Stop",
       timeoutSeconds: 900,
       commandTimeoutMs: 420_000,
+      installTimeoutMs: 0,
       handle: (input, context, dependencies) =>
         handleStop(stopEvent.parse(input), context, dependencies),
     },

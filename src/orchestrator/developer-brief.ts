@@ -66,7 +66,8 @@ async function gateFailures(
 
 // The dependencies, installed by the job before the session: the sandbox of
 // the session mounts `node_modules/.bin` read-only, so the session cannot
-// install them itself.
+// install them itself. After a change of a planned manifest, the
+// `PostToolUse` hook installs them again (#49).
 async function install(sources: DeveloperSources, command: string) {
   const result = await sources.installer.run(command, []);
   if (result.ok) return;

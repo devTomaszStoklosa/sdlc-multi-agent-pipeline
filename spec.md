@@ -518,6 +518,7 @@ version: 1
 
 commands:
   install: "<instalacja zależności>"
+  update_lockfile: "<opcjonalna instalacja po zmianie manifestu zależności z aktualizacją lockfile'a>"
   build: "<budowanie>"
   test: "<testy jednostkowe i integracyjne>"
   lint: "<linter>"

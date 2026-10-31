@@ -146,6 +146,35 @@ describe("ClaudeRoleRunner", () => {
     });
   });
 
+  it("tells the hooks which planned manifests to install, if configured", async () => {
+    const withManifests: RoleSession = {
+      ...session,
+      manifests: () => ["package.json"],
+    };
+    const contextOf = async (config: string) => {
+      await runner({ planner: withManifests }).run(
+        { ...input, config },
+        new AbortController().signal,
+      );
+      const file = path.join(sessionsDir, "planner-2", "hook-context.json");
+      return JSON.parse(await readFile(file, "utf8")) as {
+        dependencies?: unknown;
+      };
+    };
+    const commands = {
+      install: "npm ci",
+      update_lockfile: "npm install --ignore-scripts",
+      test: "npm test",
+      lint: "npm run lint",
+      format: "npm run format",
+    };
+    expect((await contextOf(configText({ commands }))).dependencies).toEqual({
+      command: "npm install --ignore-scripts",
+      manifests: ["package.json"],
+    });
+    expect((await contextOf(configText())).dependencies).toBeUndefined();
+  });
+
   it("refuses a role without a session and an invalid configuration copy", async () => {
     const signal = new AbortController().signal;
     await expect(runner({}).run(input, signal)).rejects.toThrow(
