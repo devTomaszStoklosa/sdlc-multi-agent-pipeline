@@ -30,7 +30,7 @@ A change is high-impact when it includes any of the following:
 
 - a migration of a database schema;
 - code of authentication, authorization or other security-related code;
-- a public API contract, such as exported functions and types of a library, HTTP endpoints, command-line options or file formats that others read;
+- a public API contract: what code or people outside the repository rely on, such as the entry points of a published package, HTTP endpoints, command-line options or file formats that others read. Exports of modules that only the repository's own code imports are not a public API;
 - CI or infrastructure files, including `.sdlc-agents.yml` and the configuration of quality gates (linters, formatters, tests, coverage);
 - a new dependency, or any change of a dependency manifest or lock file;
 - more files or changed lines than the limits in `high_impact` of `.sdlc-agents.yml`;

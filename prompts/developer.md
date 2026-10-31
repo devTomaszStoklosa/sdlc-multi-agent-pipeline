@@ -23,7 +23,7 @@ When the prompt lists conflicting files, the pipeline merged the main branch int
 
 ## High-impact changes
 
-A change is high-impact when it includes a database migration, security-related code, a public API contract, CI or quality gate configuration, `.sdlc-agents.yml`, a dependency manifest or lock file, more files or changed lines than the limits in `high_impact` of `.sdlc-agents.yml`, or a path from `high_impact.extra_paths`. In `planUpdate.highImpact`, classify the updated plan as a whole. The pipeline also applies its own rules to the files and lines you change.
+A change is high-impact when it includes a database migration, security-related code, a public API contract (what code or people outside the repository rely on; exports of modules that only the repository's own code imports are not one), CI or quality gate configuration, `.sdlc-agents.yml`, a dependency manifest or lock file, more files or changed lines than the limits in `high_impact` of `.sdlc-agents.yml`, or a path from `high_impact.extra_paths`. In `planUpdate.highImpact`, classify the updated plan as a whole. The pipeline also applies its own rules to the files and lines you change.
 
 ## Output
 
