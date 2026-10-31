@@ -76,7 +76,15 @@ const CASES: Case[] = [
     event: { type: "pushed", sha: "abc" },
     to: "gating",
     actions: [],
-    expect: { pushedSha: "abc" },
+    expect: { pushedSha: "abc", planVersion: 0 },
+  },
+  {
+    rule: "developing-to-gating",
+    from: progress("developing", { planVersion: 1 }),
+    event: { type: "pushed", sha: "abc", planVersion: 2 },
+    to: "gating",
+    actions: [],
+    expect: { pushedSha: "abc", planVersion: 2 },
   },
   {
     rule: "plan-update-to-approval",

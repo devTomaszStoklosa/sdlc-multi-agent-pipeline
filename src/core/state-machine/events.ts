@@ -13,7 +13,8 @@ export type RunEvent =
   | { type: "plan-published"; version: number; highImpact: boolean }
   | { type: "plan-approved"; version: number; by: string; at: string }
   | { type: "plan-changes-requested" }
-  | { type: "pushed"; sha: string }
+  // A push may follow a plan update that needs no approval (FR-4.11).
+  | { type: "pushed"; sha: string; planVersion?: number }
   | { type: "plan-updated"; version: number; highImpact: boolean }
   | { type: "gates-completed"; sha: string; passed: boolean }
   | {

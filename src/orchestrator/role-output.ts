@@ -21,6 +21,8 @@ const outcomeSchema = z.discriminatedUnion("kind", [
     sha: z.string().min(1),
     branch: z.string().min(1),
     pr: z.number().int().min(1),
+    // The plan version of an update published with the push (FR-4.11).
+    planVersion: z.number().int().min(1).optional(),
   }),
   z.strictObject({
     kind: z.literal("verdict"),
