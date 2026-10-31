@@ -134,6 +134,29 @@ describe("GitWorkspace", { timeout: 60_000 }, () => {
     expect(await work.commit("feat: nothing (#12)")).toBe(false);
   });
 
+  it("leaves out the empty files that the sandbox mounts over", async () => {
+    await pushFrom("main", "yarn.lock", "");
+    clone();
+    const work = workspaceOf();
+    await work.prepare({});
+    for (const file of [".env", ".gitmodules", "pnpm-lock.yaml"]) {
+      await writeFile(path.join(workspace, file), "");
+    }
+    // A placeholder name with content, or one the branch has, stays.
+    await writeFile(path.join(workspace, "bunfig.toml"), "[install]\n");
+    await writeFile(
+      path.join(workspace, "src/new.ts"),
+      "export const b = 1;\n",
+    );
+    expect(await work.commit("feat: add b (#12)")).toBe(true);
+    expect((await work.diff("main")).map((change) => change.path)).toEqual([
+      "bunfig.toml",
+      "src/new.ts",
+    ]);
+    expect(existsSync(path.join(workspace, ".env"))).toBe(false);
+    expect(existsSync(path.join(workspace, "yarn.lock"))).toBe(true);
+  });
+
   it("runs no hook or configuration that the session wrote", async () => {
     clone();
     const work = workspaceOf();

@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
-import { access, cp, lstat, open, rename } from "node:fs/promises";
+import { access, cp, lstat, open, rename, rm } from "node:fs/promises";
 import path from "node:path";
+import { SANDBOX_PLACEHOLDERS } from "./sandbox-placeholders.ts";
 import type {
   PrepareSpec,
   RunWorkspace,
@@ -99,6 +100,7 @@ export class GitWorkspace implements RunWorkspace {
   }
 
   async commit(message: string): Promise<boolean> {
+    await this.removePlaceholders();
     if (this.conflicts.length > 0) {
       await this.git(["add", "-A", "--", ...this.conflicts]);
       await this.git(["commit", "--no-verify", "--no-edit"]);
@@ -151,6 +153,25 @@ export class GitWorkspace implements RunWorkspace {
       [header],
     );
     return this.head();
+  }
+
+  // The sandbox's mount points are not the session's work: an empty file of
+  // the list that the branch did not have goes before the commit.
+  private async removePlaceholders(): Promise<void> {
+    for (const file of SANDBOX_PLACEHOLDERS) {
+      const full = path.join(this.options.workspace, file);
+      try {
+        const stats = await lstat(full);
+        if (!stats.isFile() || stats.size > 0) continue;
+      } catch {
+        continue;
+      }
+      const tracked = await this.git(
+        ["cat-file", "-e", `HEAD:${file}`],
+        [0, 1, 128],
+      );
+      if (tracked.code !== 0) await rm(full);
+    }
   }
 
   private async merge(merge: NonNullable<PrepareSpec["merge"]>) {

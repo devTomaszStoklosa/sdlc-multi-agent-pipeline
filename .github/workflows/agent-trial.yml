@@ -230,6 +230,19 @@ jobs:
           fi
           exit "$status"
 
+      # The sandbox leaves empty files in the workspace as mount points for
+      # protected paths. The Developer's job removes those of the list in
+      # src/git/git-workspace.ts before it commits, so a new one must go there.
+      - name: List the empty files that the session left in the workspace
+        if: always()
+        working-directory: workspace
+        run: |
+          git status --porcelain --untracked-files=all | sed -n 's/^?? //p' | while read -r file; do
+            if [ -f "$file" ] && [ ! -s "$file" ]; then
+              echo "::notice::Empty file left in the workspace: $file"
+            fi
+          done
+
       # The files stay on the runner, but a token in them would mean that it
       # reached the model or the audit log.
       - name: Check the session files for the token
