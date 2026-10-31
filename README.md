@@ -50,6 +50,7 @@ Skrypty:
 - `npm run prepare-session -- --role <rola> --workspace <katalog> --config <.sdlc-agents.yml> --out <katalog>`: zapisuje kontekst hooków i ustawienia Claude Code dla sesji agenta (rozdz. 3.4 planu). Katalog wyjściowy musi leżeć poza przestrzenią roboczą. Sesja powinna mieć `CLAUDE_CONFIG_DIR` w tym samym katalogu, a nie w katalogu domowym. Kody wyjścia jak w `validate-config`.
 - `npm run session-summary -- --result <wynik.json> --audit <log.jsonl>`: podsumowanie sesji w Markdown bez transkryptu, z redakcją sekretów.
 - `npm run orchestrator -- <polecenie>`: kod jobów reusable workflows Orchestratora (`filter`, `scopes`, `decide`, `role`, `advance`, `target`, `cancel`, `wait-run`, `finalize`). Tokeny, zdarzenie i ścieżki czyta ze zmiennych środowiskowych GitHub Actions, a wyniki zapisuje jako outputy joba.
+- `npm run scope-gate`: bramka zakresu (QG-7.9) dla zdarzenia `pull_request` z GitHub Actions. Kod wyjścia 0 oznacza bramkę zaliczoną albo zdarzenie, którego nie dotyczy, 1 niezaliczoną, a 2 błąd.
 
 ## Hooki agentów
 
@@ -80,13 +81,12 @@ Stan przebiegu jest w ukrytym komentarzu GitHub App w issue ([src/core/run-store
 
 Ręczne uruchomienie workflow Orchestrate z numerem issue startuje przebieg czekający w kolejce, gdy nie ma innego aktywnego przebiegu, odbiera wynik bramek, który nie dotarł, a etap, którego job zakończył się bez wyniku, kieruje do `needs-human`.
 
-Developer i Reviewer są do P6 i P7 zaślepkami ([src/agents/stub-role.ts](src/agents/stub-role.ts)) i nie zużywają limitu planu Pro. Ich zachowanie ustala ukryty blok w treści issue, np.:
+Reviewer jest do P7 zaślepką ([src/agents/stub-role.ts](src/agents/stub-role.ts)) i nie zużywa limitu planu Pro. Jego zachowanie, a w testach także zachowanie Plannera i Developera, ustala ukryty blok w treści issue, np.:
 
 ```text
 <!-- sdlc-stub
 plans: [high-impact, normal]      # rodzaj planu w kolejnych wersjach
 plan_update: high-impact          # pierwszy etap Developera aktualizuje plan
-gates: [fail, pass]               # kolejne pushe nie przechodzą albo przechodzą formatowania
 verdicts: [changes_requested, approve]
 repeat_finding: true              # każde changes_requested zgłasza to samo znalezisko
 failures:
@@ -97,7 +97,7 @@ cost_usd: 0.01                    # szacunek kosztu każdej sesji
 -->
 ```
 
-Bez bloku bramki przechodzą, a Reviewer zwraca `approve`. Ostatni element listy obowiązuje dla kolejnych wystąpień. Pola `plans` oraz wpisy `planner` w `failures` i `delay_seconds` działają tylko w testach, bo w repozytorium demo Planner pracuje na Claude Code.
+Bez bloku Reviewer zwraca `approve`. Ostatni element listy obowiązuje dla kolejnych wystąpień. Pola `plans` i `plan_update` oraz wpisy `planner` i `developer` w `failures` i `delay_seconds` działają tylko w testach, bo w repozytorium demo Planner i Developer pracują na Claude Code.
 
 ## Planner
 
@@ -106,6 +106,24 @@ Planner działa w jobie roli jako sesja `claude -p` ([src/agents/claude-runner.t
 Kod joba przed sesją zbiera dane dla Plannera: issue, komentarze osób z prawem zapisu, wcześniejsze wersje planu, podsumowanie zatrzymania poprzedniego przebiegu i diff brancha jego otwartego PR (FR-4.28b). Wszystko to trafia do promptu jako niezaufane dane (SEC-8.5).
 
 Po sesji kod joba waliduje plan, klasyfikuje go i publikuje jako nowy komentarz z numerem wersji (FR-4.3, FR-4.6). Zmiana jest high-impact, gdy wskaże ją Planner albo któraś reguła z [src/agents/planner/high-impact.ts](src/agents/planner/high-impact.ts): manifest zależności, pliki CI, infrastruktury i konfiguracji bramek z `.sdlc-agents.yml`, `high_impact.extra_paths` albo limity plików i linii. Przed publikacją wersji high-impact job zdejmuje `plan:approved` (FR-4.5). Lista plików jest w bloku ` ```yaml sdlc-plan `, który czyta `parsePlanBlock`.
+
+## Developer
+
+Developer działa w jobie roli jako sesja `claude -p` z modelem i promptem z [prompts/roles.yml](prompts/roles.yml), narzędziami do odczytu, edycji i poleceń powłoki w sandboxie oraz hookami z [src/hooks](src/hooks). Sandbox nie pozwala poleceniom zapisywać w kodzie pipeline'u, w katalogu sesji ani w `$RUNNER_TEMP`, które leżą obok przestrzeni roboczej w katalogu domowym runnera. Sesja nie commituje i nie pushuje: zostawia zmiany w przestrzeni roboczej i zwraca według schematu z [src/agents/developer/work.ts](src/agents/developer/work.ts) typ i temat commita, podsumowanie, issue spoza zakresu i opcjonalną aktualizację planu.
+
+Przed sesją kod joba przenosi `.git` checkoutu do własnego katalogu w `$RUNNER_TEMP` ([src/git](src/git)), a sesji zostawia kopię. Polecenia git joba działają na tym katalogu bez konfiguracji systemowej, globalnej i hooków, więc nic, co zapisała sesja, nie uruchamia się w jobie z tokenami. Job przełącza przestrzeń roboczą na branch przebiegu, a w pierwszym etapie przebiegu, który kontynuuje otwarty PR, scala do niego `main` i zostawia konflikty sesji (FR-4.28b). Sesja dostaje bieżącą wersję planu i końcówki logów niezaliczonych jobów bramek ostatniego pushu (FR-4.12).
+
+Po sesji kod joba ([src/orchestrator/developer-effects.ts](src/orchestrator/developer-effects.ts)):
+
+1. commituje zmiany z komunikatem Conventional Commits z numerem issue, który składa sam (FR-4.9);
+2. odrzuca branch z niepoprawionymi konfliktami, zagnieżdżonymi repozytoriami, ścieżkami z `hooks.deny_paths` albo ponad 200 zmienionymi plikami;
+3. publikuje aktualizację planu jako nową wersję z powodem i pełną listą plików (FR-4.11). Wersja high-impact zdejmuje `plan:approved` i czeka na akceptację bez pushu;
+4. zakłada issue spoza zakresu (FR-4.10);
+5. pushuje tokenem App na branch `<typ>/<numer-issue>-<opis z tytułu issue>` (FR-4.7) i otwiera draft PR z `Closes #<numer>`, linkiem do planu, issue spoza zakresu i poprzednim PR (FR-4.8).
+
+## Bramka zakresu
+
+Bramka zakresu ([src/gates/scope](src/gates/scope)) działa w workflow bramek repozytorium demo jako reusable workflow [scope-gate.yml](.github/workflows/scope-gate.yml) przypięty commitem tego repozytorium. Dotyczy PR przebiegu, czyli PR bota z brancha przebiegu tego repozytorium. Każdy plik, który PR zmienia, musi być w najnowszym planie, który App opublikowała w issue. Zmieniona nazwa wymaga obu ścieżek, a lockfile spoza planu jest dozwolony tylko obok manifestu zależności z planu (QG-7.9). Bramka czyta tylko publiczne dane tokenem workflow do odczytu, więc nie potrzebuje sekretu.
 
 Cienki workflow repozytorium demo przekazuje do `orchestrate.yml` sekret `CLAUDE_CODE_OAUTH_TOKEN` po nazwie, tak jak do `agent-trial.yml`. Joby ról instalują Claude Code i sandbox akcją [agent-setup](.github/actions/agent-setup/action.yml), a w podsumowaniu kroku publikują tylko podsumowania sesji, bez transkryptu.
 
