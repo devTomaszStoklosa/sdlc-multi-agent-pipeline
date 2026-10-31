@@ -7,6 +7,7 @@ import type {
   CheckRunsPort,
   ContentsPort,
   FileChange,
+  WorkflowJobInfo,
   WorkflowRunInfo,
   WorkflowRunsPort,
 } from "./ports.ts";
@@ -70,6 +71,27 @@ export class GitHubWorkflowRuns extends RepoApi implements WorkflowRunsPort {
     };
   }
 
+  async listJobs(runId: number): Promise<WorkflowJobInfo[]> {
+    const jobs = await this.octokit.paginate(
+      this.octokit.rest.actions.listJobsForWorkflowRun,
+      { ...this.repo, run_id: runId, filter: "latest", per_page: 100 },
+    );
+    return jobs.map((job) => ({
+      id: job.id,
+      name: job.name,
+      conclusion: job.conclusion,
+    }));
+  }
+
+  async jobLog(jobId: number): Promise<string> {
+    const { data } =
+      await this.octokit.rest.actions.downloadJobLogsForWorkflowRun({
+        ...this.repo,
+        job_id: jobId,
+      });
+    return typeof data === "string" ? data : String(data);
+  }
+
   // A run that has already completed cannot be cancelled (409).
   async cancelRun(id: number): Promise<void> {
     try {
@@ -129,6 +151,7 @@ export class GitHubContents extends RepoApi implements ContentsPort {
     });
     return (data.files ?? []).map((file) => ({
       path: file.filename,
+      previousPath: file.previous_filename,
       additions: file.additions,
       deletions: file.deletions,
       patch: file.patch,
