@@ -18,6 +18,7 @@
     "prepare-session": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/agents/prepare-session.ts",
     "session-summary": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/agents/session-summary-cli.ts",
     "orchestrator": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/orchestrator/cli.ts",
+    "scope-gate": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/gates/scope/cli.ts",
     "prepare": "lefthook install"
   },
   "devDependencies": {
