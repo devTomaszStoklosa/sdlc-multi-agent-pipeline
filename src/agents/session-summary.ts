@@ -54,8 +54,12 @@ function auditLines(all: readonly AuditRecord[]): string[] {
     (sum, record) => sum + (record.redactions ?? 0),
     0,
   );
+  const failedTools = records
+    .filter((record) => record.decision === "failed")
+    .map((record) => record.tool ?? "unknown");
   return [
     `- Tool calls: ${countBy(records.map((record) => record.decision))}`,
+    `- Failed tool calls: ${countBy(failedTools)}`,
     `- Stop hook: ${countBy(stops.map((record) => record.decision))}`,
     `- Blocks by category: ${countBy(categories)}`,
     `- Redactions in tool output: ${String(redactions)}`,

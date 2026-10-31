@@ -14,7 +14,7 @@ import { advance } from "./advance.ts";
 import { decide } from "./decide.ts";
 import { filterEvent } from "./filter.ts";
 import { runRoleJob } from "./role-job.ts";
-import { roleJobOutputSchema } from "./role-output.ts";
+import { describeRoleJob, roleJobOutputSchema } from "./role-output.ts";
 import { STOP_WATCH_MS } from "./stop-watch.ts";
 import {
   ORCHESTRATOR_SCOPE,
@@ -132,7 +132,7 @@ async function roleCommand(given: Args): Promise<void> {
     given.issue,
     role,
   );
-  console.log(`Role job: ${output.status}`);
+  console.log(`Role job: ${describeRoleJob(output)}`);
   await setOutputs({ output: JSON.stringify(output) });
 }
 

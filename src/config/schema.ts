@@ -84,6 +84,10 @@ export const orgBaselineSchema = z.strictObject({
 
 const commands = z.strictObject({
   install: command,
+  // Installs the dependencies after a change of a planned dependency manifest
+  // and updates the lockfile, such as `npm install --ignore-scripts`. Without
+  // it, a Developer session cannot change dependencies (#49).
+  update_lockfile: command.optional(),
   build: command.optional(),
   test: command,
   lint: command,

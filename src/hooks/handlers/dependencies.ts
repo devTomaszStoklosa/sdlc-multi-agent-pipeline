@@ -6,6 +6,8 @@ import { redactText } from "../redact.ts";
 export interface HookDependencies {
   log: ToolCallLog;
   runner: CommandRunner;
+  // Runs the dependency install with the network (#49).
+  installer: CommandRunner;
   now: () => Date;
 }
 

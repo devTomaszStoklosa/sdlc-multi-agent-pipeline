@@ -58,6 +58,8 @@ export interface RoleSession {
   prompt(input: RoleInput, instructions: string): string;
   outputSchema: object;
   toOutput(structured: unknown): unknown;
+  // The dependency manifests that the session may change, for the hooks.
+  manifests?(input: RoleInput): readonly string[];
 }
 
 export interface ClaudeRunnerOptions {
@@ -136,6 +138,7 @@ export class ClaudeRoleRunner implements RoleRunner {
       baseline: options.baseline,
       out: dir,
       protect: [options.sessionsDir, ...options.protect],
+      manifests: session.manifests?.(input),
     });
     if (!files.ok) {
       throw new Error(`The run's configuration copy is invalid.`);

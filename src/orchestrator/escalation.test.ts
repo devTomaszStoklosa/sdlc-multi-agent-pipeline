@@ -11,6 +11,14 @@ describe("retries and escalation", () => {
     ]);
     expect((await repo.run(1)).usage[0]?.attempts).toBe(3);
     expect(await repo.state(1)).toBe("gating");
+    const attempts = repo.log.records.filter(
+      (record) => record.type === "stage-attempt" && record.agent === "planner",
+    );
+    expect(attempts.map((record) => record.details)).toEqual([
+      { attempt: 1, message: "Stub planner failure infra on attempt 1." },
+      { attempt: 2, message: "Stub planner failure infra on attempt 2." },
+      { attempt: 3 },
+    ]);
   });
 
   it("escalates after the retry budget and resumes when needs-human goes", async () => {

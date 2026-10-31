@@ -27,6 +27,9 @@ export interface SessionSpec {
   // More directories of the job that the session may not write, such as the
   // runner's temporary directory.
   protect?: readonly string[];
+  // The dependency manifests of the plan, which the hooks install after a
+  // write (#49).
+  manifests?: readonly string[];
 }
 
 export interface SessionFiles {
@@ -57,6 +60,7 @@ export async function writeSessionFiles(
       role: spec.role,
       workspace: spec.workspace,
       auditLog,
+      manifests: spec.manifests,
     }),
   );
   const contextPath = path.join(out, "hook-context.json");

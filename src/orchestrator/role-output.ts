@@ -51,3 +51,12 @@ export const roleJobOutputSchema = z.discriminatedUnion("status", [
 
 export type RoleJobOutput = z.infer<typeof roleJobOutputSchema>;
 export type RoleOutcome = z.infer<typeof outcomeSchema>;
+
+// One line for the role job's log, with the cause of a failed stage, so the
+// job in which the session failed shows why (NFR-11.3).
+export function describeRoleJob(output: RoleJobOutput): string {
+  if (output.status === "skipped") return `skipped (${output.reason})`;
+  const { outcome } = output;
+  if (outcome.kind !== "failed") return `done, ${outcome.kind}`;
+  return `done, failed (${outcome.failure}): ${outcome.message}`;
+}
