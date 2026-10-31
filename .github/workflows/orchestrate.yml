@@ -10,8 +10,10 @@ name: Orchestrate
 # the Developer follows without any GitHub event.
 #
 # Only the role jobs, in the `agents` environment, get the Claude Code token,
-# and only the session process receives it (plan 4). The Planner runs on
-# Claude Code; the Developer and the Reviewer stay stubs until P6 and P7.
+# and only the session process receives it (plan 4). The Planner and the
+# Developer run on Claude Code; the Reviewer stays a stub until P7. The
+# Developer's job commits and pushes the session's work with the app token
+# from its own git directory, outside the workspace (plan 3.4).
 # Each job that writes gets a GitHub App token narrowed to its scope in
 # src/orchestrator/scopes.ts, and every scope there names a permission,
 # because a token request without any permission input inherits all
@@ -133,10 +135,13 @@ jobs:
     # the limit of the job around it.
     timeout-minutes: 50
     environment: agents
+    # The workflow token reads the logs of failed gates for the Developer
+    # (FR-4.12).
     permissions:
       contents: read
       issues: read
       pull-requests: read
+      actions: read
     outputs:
       output: ${{ steps.role.outputs.output }}
     env:
@@ -153,13 +158,16 @@ jobs:
           persist-credentials: false
       - uses: ./pipeline/.github/actions/pipeline-setup
       - uses: ./pipeline/.github/actions/agent-setup
-      # The session reads the main branch of the calling repository. Its
-      # files stay outside this checkout, so the agent cannot change its own
-      # hooks (plan 3.4).
+      # The session reads the main branch of the calling repository, and the
+      # Developer's job checks out the run's branch. The whole history lets
+      # the job merge the main branch into it (FR-4.28b). The session files
+      # stay outside this checkout, so the agent cannot change its own hooks
+      # (plan 3.4).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: workspace
+          fetch-depth: 0
           persist-credentials: false
       - run: echo "SDLC_SESSIONS_DIR=$RUNNER_TEMP/agent-sessions" >> "$GITHUB_ENV"
       - id: scope
@@ -176,6 +184,7 @@ jobs:
       - id: role
         env:
           SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+          SDLC_APP_SLUG: ${{ steps.token.outputs.app-slug }}
           SDLC_READ_TOKEN: ${{ github.token }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: npm run --silent --prefix pipeline orchestrator -- role --issue "$ISSUE" --role "$ROLE"
@@ -258,10 +267,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     environment: agents
+    # The workflow token reads the logs of failed gates for the Developer
+    # (FR-4.12).
     permissions:
       contents: read
       issues: read
       pull-requests: read
+      actions: read
     outputs:
       output: ${{ steps.role.outputs.output }}
     env:
@@ -278,13 +290,16 @@ jobs:
           persist-credentials: false
       - uses: ./pipeline/.github/actions/pipeline-setup
       - uses: ./pipeline/.github/actions/agent-setup
-      # The session reads the main branch of the calling repository. Its
-      # files stay outside this checkout, so the agent cannot change its own
-      # hooks (plan 3.4).
+      # The session reads the main branch of the calling repository, and the
+      # Developer's job checks out the run's branch. The whole history lets
+      # the job merge the main branch into it (FR-4.28b). The session files
+      # stay outside this checkout, so the agent cannot change its own hooks
+      # (plan 3.4).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: workspace
+          fetch-depth: 0
           persist-credentials: false
       - run: echo "SDLC_SESSIONS_DIR=$RUNNER_TEMP/agent-sessions" >> "$GITHUB_ENV"
       - id: scope
@@ -301,6 +316,7 @@ jobs:
       - id: role
         env:
           SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
+          SDLC_APP_SLUG: ${{ steps.token.outputs.app-slug }}
           SDLC_READ_TOKEN: ${{ github.token }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: npm run --silent --prefix pipeline orchestrator -- role --issue "$ISSUE" --role "$ROLE"
