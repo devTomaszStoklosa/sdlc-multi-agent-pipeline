@@ -37,11 +37,14 @@ export function sandboxEnvironment(
 // token, and it cannot connect anywhere. Only the workspace and a private
 // /tmp are writable, so it cannot change the session's hooks or the files that
 // GitHub Actions reads between steps. The arguments reach the command as
-// positional parameters, so a file name is never parsed as shell code.
+// positional parameters, so a file name is never parsed as shell code. Only
+// the install command of a Developer job gets the network, for the package
+// registry; it still sees no process and no variable that holds a token.
 export function sandboxArguments(
   workspace: string,
   command: string,
   args: readonly string[],
+  network = false,
 ): string[] {
   return [
     ["--ro-bind", "/", "/"],
@@ -52,7 +55,7 @@ export function sandboxArguments(
     ["--chdir", workspace],
     ["--setenv", "TMPDIR", "/tmp"],
     ["--setenv", "npm_config_cache", "/tmp/npm-cache"],
-    ["--unshare-pid", "--unshare-net", "--unshare-ipc"],
+    ["--unshare-pid", "--unshare-ipc", ...(network ? [] : ["--unshare-net"])],
     ["--new-session", "--die-with-parent"],
     ["--", "sh", "-c", `${command} "$@"`, "sh", ...args],
   ].flat();
@@ -63,10 +66,12 @@ export function sandboxArguments(
 export class SandboxedCommandRunner implements CommandRunner {
   private readonly workspace: string;
   private readonly timeoutMs: number;
+  private readonly network: boolean;
 
-  constructor(workspace: string, timeoutMs: number) {
+  constructor(workspace: string, timeoutMs: number, network = false) {
     this.workspace = workspace;
     this.timeoutMs = timeoutMs;
+    this.network = network;
   }
 
   run(command: string, args: readonly string[]): Promise<CommandResult> {
@@ -75,7 +80,12 @@ export class SandboxedCommandRunner implements CommandRunner {
       timeout: this.timeoutMs,
       maxBuffer: MAX_BUFFER,
     };
-    const bwrapArgs = sandboxArguments(this.workspace, command, args);
+    const bwrapArgs = sandboxArguments(
+      this.workspace,
+      command,
+      args,
+      this.network,
+    );
     return new Promise((resolve, reject) => {
       execFile("bwrap", bwrapArgs, options, (error, stdout, stderr) => {
         if (error?.code === "ENOENT") {

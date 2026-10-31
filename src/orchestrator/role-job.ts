@@ -9,10 +9,12 @@ import {
 import type { Run, RunRecord } from "../core/run-store/run-record.ts";
 import { roleOf } from "../core/state-machine/states.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
+import type { CommandRunner } from "../hooks/commands.ts";
 import type { Role } from "../hooks/roles.ts";
 import { guardFor, type JobContext } from "./context.ts";
 import { developerBrief } from "./developer-brief.ts";
 import { RunInactiveError } from "./guard.ts";
+import { StageError } from "./stage-error.ts";
 import { remainingMinutes, runLimits } from "./limits.ts";
 import { plannerBrief } from "./planner-brief.ts";
 import {
@@ -29,8 +31,10 @@ export interface RoleJobContext extends JobContext {
   stopWatch: { intervalMs: number; wait: Wait };
   // The pipeline's app, the author of its own comments.
   appId: number;
-  // The checkout of the connected repository, for a Developer job.
+  // The checkout of the connected repository and its install command, for a
+  // Developer job.
   workspace: RunWorkspace;
+  installer: CommandRunner;
   // The name of the repository's gates workflow (plan 3.5).
   gatesWorkflow: string;
 }
@@ -59,6 +63,7 @@ const BRIEFS: Partial<Record<Role, Brief>> = {
         contents: context.app.contents,
         runs: context.read.runs,
         workspace: context.workspace,
+        installer: context.installer,
         baseline: context.baseline,
         appId: context.appId,
         gatesWorkflow: context.gatesWorkflow,
@@ -234,7 +239,20 @@ async function work(
   const guard = guardFor(context, record.issue, run.id);
   await guard.ensure("role session", { state: run.progress.state });
   const issue = await context.read.issues.getIssue(record.issue);
-  const brief = await BRIEFS[role]?.(context, record);
+  let brief: RoleBrief | undefined;
+  try {
+    brief = await BRIEFS[role]?.(context, record);
+  } catch (error) {
+    if (!(error instanceof StageError)) throw error;
+    return {
+      status: "done",
+      role,
+      runId: run.id,
+      attempts: 1,
+      usage: NO_USAGE,
+      outcome: { kind: "failed", failure: "infra", message: error.message },
+    };
+  }
   const scope: EffectScope = {
     context,
     guard,

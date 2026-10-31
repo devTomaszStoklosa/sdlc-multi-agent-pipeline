@@ -28,7 +28,9 @@ describe("developerPrompt", () => {
     expect(prompt.startsWith("# Developer\n\n## This run")).toBe(true);
     expect(prompt).toContain("You implement version 1 of the plan.");
     expect(prompt).toContain("the repository's main branch");
-    expect(prompt).toContain("Install the dependencies with `npm ci`.");
+    expect(prompt).toContain(
+      "The pipeline installed the dependencies with `npm ci`.",
+    );
     expect(prompt).toContain(
       `<data-${NONCE} source="plan, version 1">\n### Plan, wersja 1 (przebieg 12-1)\n</data-${NONCE}>`,
     );

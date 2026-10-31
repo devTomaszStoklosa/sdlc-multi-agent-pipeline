@@ -192,6 +192,22 @@ describe("a Developer stage", () => {
     expect(repo.workspace.pushes).toHaveLength(1);
   });
 
+  it("installs the dependencies before each session", async () => {
+    const { repo } = harness();
+    await repo.label(1, "agent:ready");
+    await repo.gates(1, "failure");
+    expect(repo.installs).toEqual(["npm ci", "npm ci"]);
+  });
+
+  it("escalates a failed install without a session", async () => {
+    const { repo, developer } = harness();
+    repo.installResult = { ok: false, output: "npm ERR! code ERESOLVE" };
+    await repo.label(1, "agent:ready");
+    expect(await repo.state(1)).toBe("needs-human");
+    expect(developer.inputs).toEqual([]);
+    expect(repo.workspace.pushes).toEqual([]);
+  });
+
   it.each([
     [
       "a session that changed nothing",

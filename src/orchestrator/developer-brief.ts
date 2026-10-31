@@ -3,6 +3,7 @@ import { planEntries, planOf } from "../agents/planner/plan-comment.ts";
 import type { OrgBaseline } from "../config/schema.ts";
 import type { RunRecord } from "../core/run-store/run-record.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
+import type { CommandRunner } from "../hooks/commands.ts";
 import type {
   CommentsPort,
   ContentsPort,
@@ -11,9 +12,11 @@ import type {
 import { redactText } from "../hooks/redact.ts";
 import { mergeMessage } from "./developer-commit.ts";
 import { runConfig } from "./limits.ts";
+import { StageError } from "./stage-error.ts";
 
 const MAX_FAILED_JOBS = 5;
 const MAX_LOG = 12_000;
+const MAX_INSTALL_OUTPUT = 1500;
 // GitHub starts every log line with a time stamp.
 const TIME_STAMP = /^\d{4}-\d\d-\d\dT[\d:.]+Z /gm;
 
@@ -23,6 +26,8 @@ export interface DeveloperSources {
   // The job's read-only workflow token, which may read the gate logs.
   runs: WorkflowRunsPort;
   workspace: RunWorkspace;
+  // Runs the install command in bubblewrap with the network (plan 3.4).
+  installer: CommandRunner;
   baseline: OrgBaseline;
   appId: number;
   // The name of the repository's gates workflow (plan 3.5).
@@ -59,10 +64,20 @@ async function gateFailures(
   );
 }
 
+// The dependencies, installed by the job before the session: the sandbox of
+// the session mounts `node_modules/.bin` read-only, so the session cannot
+// install them itself.
+async function install(sources: DeveloperSources, command: string) {
+  const result = await sources.installer.run(command, []);
+  if (result.ok) return;
+  const output = redactText(result.output).value.slice(-MAX_INSTALL_OUTPUT);
+  throw new StageError(`The install command \`${command}\` failed:\n${output}`);
+}
+
 // What a Developer session gets besides the issue (SEC-8.10): the plan
 // version it implements, the failed gates of its last push and the conflicts
 // left by merging the main branch into the branch of an earlier run, which the
-// job does before the session (FR-4.28b).
+// job does before the session (FR-4.28b), with the dependencies installed.
 export async function developerBrief(
   sources: DeveloperSources,
   record: RunRecord,
@@ -92,6 +107,7 @@ export async function developerBrief(
     merge,
   });
   const { commands } = runConfig(run, sources.baseline);
+  await install(sources, commands.install);
   return {
     kind: "developer",
     plan: { version: plan.block.version, body: plan.body, url: plan.url },

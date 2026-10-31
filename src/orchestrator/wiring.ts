@@ -20,6 +20,10 @@ import { CommentRunStateStore } from "../core/run-store/comment-store.ts";
 import { GitWorkspace } from "../git/git-workspace.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
 import { createGitHub, type GitHub } from "../github/client.ts";
+import {
+  SandboxedCommandRunner,
+  type CommandRunner,
+} from "../hooks/commands.ts";
 import type { JobContext } from "./context.ts";
 import type { GitHubEvent } from "./filter.ts";
 
@@ -125,6 +129,18 @@ export function gitWorkspace(): RunWorkspace {
     identity: { name: bot, email: `${bot}@users.noreply.github.com` },
     parentEnv: process.env,
   });
+}
+
+// The install command of a Developer job, in bubblewrap with the network and
+// without the job's tokens (plan 3.4).
+const INSTALL_TIMEOUT_MS = 10 * 60_000;
+
+export function installer(): CommandRunner {
+  return new SandboxedCommandRunner(
+    env("SDLC_WORKSPACE"),
+    INSTALL_TIMEOUT_MS,
+    true,
+  );
 }
 
 export async function wait(ms: number, signal?: AbortSignal): Promise<void> {

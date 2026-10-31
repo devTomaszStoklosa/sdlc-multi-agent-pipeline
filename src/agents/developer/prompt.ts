@@ -22,7 +22,7 @@ function facts(input: RoleInput, given: DeveloperBrief): string[] {
       : `the run's branch \`${branch}\``;
   return [
     `Issue #${String(input.issue.number)}, run ${input.runId}. You implement version ${String(given.plan.version)} of the plan. The working directory holds ${where}.`,
-    `Install the dependencies with \`${commands.install}\`. The lint command is \`${commands.lint}\` and the test command is \`${commands.test}\`.`,
+    `The pipeline installed the dependencies with \`${commands.install}\`. The lint command is \`${commands.lint}\` and the test command is \`${commands.test}\`.`,
     ...(conflicts.length === 0
       ? []
       : [
