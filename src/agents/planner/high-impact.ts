@@ -145,9 +145,10 @@ export interface Classification {
 }
 
 // High-impact is the sum of the rules and the model's assessment, because a
-// missed high-impact change costs more than a false alarm (spec 12.2).
+// missed high-impact change costs more than a false alarm (spec 12.2). The
+// assessment is the Planner's of a plan or the Developer's of its update.
 export function classify(
-  plan: Plan,
+  assessment: Plan["highImpact"],
   facts: ChangeFacts,
   policy: HighImpactPolicy,
   rules: readonly HighImpactRule[] = HIGH_IMPACT_RULES,
@@ -156,12 +157,12 @@ export function classify(
     .map((rule) => rule.check(facts, policy))
     .filter((reason) => reason !== undefined)
     .map((text): Reason => ({ source: "rule", text }));
-  const fromModel = plan.highImpact.reasons.map((text): Reason => ({
+  const fromModel = assessment.reasons.map((text): Reason => ({
     source: "model",
     text,
   }));
   return {
-    highImpact: plan.highImpact.value || fromRules.length > 0,
+    highImpact: assessment.value || fromRules.length > 0,
     reasons: [...fromRules, ...fromModel],
   };
 }

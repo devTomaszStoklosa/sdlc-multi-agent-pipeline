@@ -25,7 +25,7 @@ export async function plannerEffects(
   const { context, run } = scope;
   const version = run.progress.planVersion + 1;
   const classification = classify(
-    plan,
+    plan.highImpact,
     changeFacts(plan, briefOf(scope.brief, "planner")?.branchDiff?.files),
     runConfig(run, context.baseline).high_impact,
   );

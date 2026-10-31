@@ -16,7 +16,7 @@ function withFiles(...paths: string[]): Plan {
 }
 
 function ruleReasons(plan: Plan, branch = changeFacts(plan)) {
-  const result = classify(plan, branch, POLICY);
+  const result = classify(plan.highImpact, branch, POLICY);
   return {
     highImpact: result.highImpact,
     rules: result.reasons
@@ -71,7 +71,7 @@ describe("classify", () => {
     const plan = aPlan({
       highImpact: { value: true, reasons: ["Zmienia publiczne API."] },
     });
-    expect(classify(plan, changeFacts(plan), POLICY)).toEqual({
+    expect(classify(plan.highImpact, changeFacts(plan), POLICY)).toEqual({
       highImpact: true,
       reasons: [{ source: "model", text: "Zmienia publiczne API." }],
     });
