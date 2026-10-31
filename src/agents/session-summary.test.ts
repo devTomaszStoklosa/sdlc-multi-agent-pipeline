@@ -16,6 +16,9 @@ const RESULT = JSON.stringify({
 
 const AUDIT = [
   { decision: "allowed", redactions: 1 },
+  { tool: "Bash", decision: "failed" },
+  { tool: "Read", decision: "failed" },
+  { tool: "Bash", decision: "failed" },
   { decision: "denied", blocks: [{ category: "secrets" }] },
   { decision: "denied", blocks: [{ category: "network" }] },
   { decision: "denied", blocks: [{ category: "secrets" }] },
@@ -32,7 +35,8 @@ describe("summarize", () => {
     expect(summary).toContain("- Turns: 7, duration: 51000 ms");
     expect(summary).toContain("0.42 USD");
     expect(summary).toContain('"input_tokens":1200');
-    expect(summary).toContain("- Tool calls: allowed 1, denied 3");
+    expect(summary).toContain("- Tool calls: allowed 1, failed 3, denied 3");
+    expect(summary).toContain("- Failed tool calls: Bash 2, Read 1");
     expect(summary).toContain("- Stop hook: denied 1, allowed 1");
     expect(summary).toContain("- Blocks by category: secrets 2, network 1");
     expect(summary).toContain("- Redactions in tool output: 1");
@@ -48,6 +52,7 @@ describe("summarize", () => {
     const summary = summarize("", "");
     expect(summary).toContain("- Result: unknown");
     expect(summary).toContain("- Tool calls: none");
+    expect(summary).toContain("- Failed tool calls: none");
     expect(summary).toContain("- Stop hook: none");
   });
 });

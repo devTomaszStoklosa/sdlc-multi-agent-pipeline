@@ -10,6 +10,7 @@ import type { Run, RunRecord } from "../core/run-store/run-record.ts";
 import { roleOf } from "../core/state-machine/states.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
 import type { CommandRunner } from "../hooks/commands.ts";
+import { redactText } from "../hooks/redact.ts";
 import type { Role } from "../hooks/roles.ts";
 import { guardFor, type JobContext } from "./context.ts";
 import { developerBrief } from "./developer-brief.ts";
@@ -111,7 +112,9 @@ async function attempt(
     // A stop ends the job without side effects; the time limit escalates.
     if (signal.reason instanceof RunInactiveError) throw signal.reason;
     if (signal.aborted) return "timed-out";
-    const message = error instanceof Error ? error.message : String(error);
+    // The message reaches the job's log and the run events, which are public.
+    const text = error instanceof Error ? error.message : String(error);
+    const message = redactText(text).value;
     return { status: "failed", failure: "infra", message, usage: NO_USAGE };
   }
 }
@@ -156,7 +159,12 @@ async function session(
         output: result.usage.output_tokens,
       },
       cost_usd: result.usage.cost_usd,
-      details: { attempt: attempts },
+      // The cause of a failed attempt, so the role job's own events explain
+      // it (NFR-11.3).
+      details:
+        result.status === "ok"
+          ? { attempt: attempts }
+          : { attempt: attempts, message: result.message },
     });
     const retry = result.status === "failed" && RETRYABLE.has(result.failure);
     if (!retry || attempts > limits.retries)
