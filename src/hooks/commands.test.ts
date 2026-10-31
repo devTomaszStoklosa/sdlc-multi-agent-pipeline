@@ -45,6 +45,12 @@ describe("sandboxArguments", () => {
     );
   });
 
+  it("gives only the install command the network", () => {
+    const install = sandboxArguments("/work/repo", "npm ci", [], true);
+    expect(install).toContain("--unshare-pid");
+    expect(install).not.toContain("--unshare-net");
+  });
+
   it("passes the file names as positional parameters", () => {
     expect(args.slice(args.indexOf("--"))).toEqual([
       "--",

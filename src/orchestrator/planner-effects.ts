@@ -1,3 +1,4 @@
+import { briefOf } from "../agents/brief.ts";
 import { changeFacts, classify } from "../agents/planner/high-impact.ts";
 import { planComment } from "../agents/planner/plan-comment.ts";
 import type { Plan } from "../agents/planner/plan.ts";
@@ -24,8 +25,8 @@ export async function plannerEffects(
   const { context, run } = scope;
   const version = run.progress.planVersion + 1;
   const classification = classify(
-    plan,
-    changeFacts(plan, scope.brief?.branchDiff?.files),
+    plan.highImpact,
+    changeFacts(plan, briefOf(scope.brief, "planner")?.branchDiff?.files),
     runConfig(run, context.baseline).high_impact,
   );
   if (classification.highImpact) await clearApproval(scope);

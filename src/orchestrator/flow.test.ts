@@ -4,10 +4,7 @@ import { Harness, REPO } from "./test-harness.ts";
 describe("a run on stub roles", () => {
   it("goes from agent:ready to awaiting-human-review", async () => {
     const repo = new Harness();
-    repo.setScenario(
-      1,
-      "gates: [fail, pass]\nverdicts: [changes_requested, approve]",
-    );
+    repo.setScenario(1, "verdicts: [changes_requested, approve]");
     expect(await repo.label(1, "agent:ready")).toEqual([
       "planner",
       "developer",
@@ -54,7 +51,7 @@ describe("a run on stub roles", () => {
     await repo.gates(1, "failure");
     const pulls = [...repo.github.pulls.values()];
     expect(pulls).toHaveLength(1);
-    expect(pulls[0]?.headRef).toBe("chore/1-stub-run");
+    expect(pulls[0]?.headRef).toBe("chore/1-add-a-discount");
     expect((await repo.run(1)).pr).toBe(pulls[0]?.number);
   });
 

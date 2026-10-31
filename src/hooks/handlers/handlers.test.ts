@@ -169,10 +169,22 @@ describe("handlePostToolUseFailure", () => {
   });
 });
 
+const STOP = { session_id: "session-1" };
+
 describe("handleStop", () => {
   it("lets the Developer finish when lint and tests pass", async () => {
-    const { deps, runner } = dependencies();
-    expect(await handleStop(hookContext(), deps)).toEqual({ exitCode: 0 });
+    const { deps, runner, records } = dependencies();
+    expect(await handleStop(STOP, hookContext(), deps)).toEqual({
+      exitCode: 0,
+    });
+    expect(records).toEqual([
+      expect.objectContaining({
+        session: "session-1",
+        tool: "Stop",
+        input: "lint, test",
+        decision: "allowed",
+      }),
+    ]);
     const { lint, test } = hookContext().commands;
     expect(runner.calls).toEqual([
       [lint, []],
@@ -182,9 +194,11 @@ describe("handleStop", () => {
 
   it("refuses to let the Developer finish with failing tests (QG-9.12)", async () => {
     const context = hookContext();
-    const { deps } = dependencies(new FakeRunner([context.commands.test]));
+    const { deps, records } = dependencies(
+      new FakeRunner([context.commands.test]),
+    );
     const answer = JSON.parse(
-      (await handleStop(context, deps)).stdout ?? "",
+      (await handleStop(STOP, context, deps)).stdout ?? "",
     ) as {
       decision: string;
       reason: string;
@@ -192,13 +206,22 @@ describe("handleStop", () => {
     expect(answer.decision).toBe("block");
     expect(answer.reason).toContain(context.commands.test);
     expect(answer.reason).not.toContain(TOKEN);
+    expect(records).toEqual([
+      expect.objectContaining({
+        tool: "Stop",
+        decision: "denied",
+        blocks: [
+          { policy: "stage-gates", category: "quality", reason: "test failed" },
+        ],
+      }),
+    ]);
   });
 
   it.each<Role>(["planner", "reviewer"])(
     "runs no gates for the %s",
     async (role) => {
       const { deps, runner } = dependencies();
-      expect(await handleStop(hookContext(role), deps)).toEqual({
+      expect(await handleStop(STOP, hookContext(role), deps)).toEqual({
         exitCode: 0,
       });
       expect(runner.calls).toEqual([]);

@@ -45,9 +45,15 @@ export interface LabelEvent {
   at: string;
 }
 
+export interface CreatedIssue {
+  number: number;
+  url: string;
+}
+
 // Issues and pull requests share labels and the label events.
 export interface IssuesPort {
   getIssue(issue: number): Promise<IssueInfo>;
+  createIssue(title: string, body: string): Promise<CreatedIssue>;
   listOpenIssuesWithLabel(label: string): Promise<number[]>;
   addLabels(issue: number, labels: readonly string[]): Promise<void>;
   // False when the label was not there.
@@ -65,6 +71,7 @@ export interface PullRequestInfo {
   headRepo: string | undefined;
   labels: string[];
   url: string;
+  body: string;
 }
 
 export interface NewPullRequest {
@@ -78,6 +85,7 @@ export interface PullRequestsPort {
   getPull(pull: number): Promise<PullRequestInfo>;
   listOpenPulls(): Promise<PullRequestInfo[]>;
   createDraftPull(pull: NewPullRequest): Promise<PullRequestInfo>;
+  updatePullBody(pull: number, body: string): Promise<void>;
 }
 
 export type CheckConclusion = "success" | "failure" | "cancelled";
@@ -105,8 +113,17 @@ export interface WorkflowRunInfo {
   conclusion: string | null;
 }
 
+export interface WorkflowJobInfo {
+  id: number;
+  name: string;
+  conclusion: string | null;
+}
+
 export interface WorkflowRunsPort {
   getRun(id: number): Promise<WorkflowRunInfo>;
+  listJobs(runId: number): Promise<WorkflowJobInfo[]>;
+  // The plain-text log of a job of a completed run.
+  jobLog(jobId: number): Promise<string>;
   cancelRun(id: number): Promise<void>;
   forceCancelRun(id: number): Promise<void>;
   // The latest run of a workflow, by its name, for a head commit.
@@ -116,15 +133,10 @@ export interface WorkflowRunsPort {
   ): Promise<WorkflowRunInfo | undefined>;
 }
 
-export interface FileChange {
-  branch: string;
-  path: string;
-  content: string;
-  message: string;
-}
-
 export interface ChangedFile {
   path: string;
+  // The earlier path of a renamed file.
+  previousPath?: string;
   additions: number;
   deletions: number;
   // The unified diff of the file; GitHub leaves it out for large or binary
@@ -138,7 +150,4 @@ export interface ContentsPort {
   compare(base: string, head: string): Promise<ChangedFile[]>;
   readFile(path: string, ref: string): Promise<string | undefined>;
   branchExists(name: string): Promise<boolean>;
-  createBranch(name: string, sha: string): Promise<void>;
-  // Commits one file on a branch and returns the new commit SHA.
-  writeFile(change: FileChange): Promise<string>;
 }

@@ -1,4 +1,8 @@
 import type { OrgBaseline } from "../../config/schema.ts";
+import {
+  DEPENDENCY_MANIFESTS,
+  LOCKFILES,
+} from "../../core/dependency-files.ts";
 import type { ChangedFile } from "../../github/ports.ts";
 import { matchesGlob } from "../../hooks/paths.ts";
 import type { Plan } from "./plan.ts";
@@ -18,33 +22,6 @@ export interface ChangeFacts {
 export interface HighImpactRule {
   check(facts: ChangeFacts, policy: HighImpactPolicy): string | undefined;
 }
-
-const DEPENDENCY_MANIFESTS = [
-  "**/package.json",
-  "**/package-lock.json",
-  "**/npm-shrinkwrap.json",
-  "**/yarn.lock",
-  "**/pnpm-lock.yaml",
-  "**/requirements*.txt",
-  "**/pyproject.toml",
-  "**/poetry.lock",
-  "**/Pipfile",
-  "**/Pipfile.lock",
-  "**/go.mod",
-  "**/go.sum",
-  "**/Cargo.toml",
-  "**/Cargo.lock",
-  "**/Gemfile",
-  "**/Gemfile.lock",
-  "**/composer.json",
-  "**/composer.lock",
-  "**/pom.xml",
-  "**/build.gradle",
-  "**/build.gradle.kts",
-  "**/*.csproj",
-  "**/packages.config",
-  "**/Directory.Packages.props",
-];
 
 // CI, infrastructure and the configuration of the gates, `.sdlc-agents.yml`
 // included (FR-6.1, FR-10.3, QG-7.11).
@@ -93,7 +70,10 @@ function pathRule(
 }
 
 export const HIGH_IMPACT_RULES: readonly HighImpactRule[] = [
-  pathRule(() => DEPENDENCY_MANIFESTS, "manifest albo lockfile zależności"),
+  pathRule(
+    () => [...DEPENDENCY_MANIFESTS, ...LOCKFILES],
+    "manifest albo lockfile zależności",
+  ),
   pathRule(
     () => CI_AND_GATES,
     "pliki CI, infrastruktury albo konfiguracji bramek",
@@ -145,9 +125,10 @@ export interface Classification {
 }
 
 // High-impact is the sum of the rules and the model's assessment, because a
-// missed high-impact change costs more than a false alarm (spec 12.2).
+// missed high-impact change costs more than a false alarm (spec 12.2). The
+// assessment is the Planner's of a plan or the Developer's of its update.
 export function classify(
-  plan: Plan,
+  assessment: Plan["highImpact"],
   facts: ChangeFacts,
   policy: HighImpactPolicy,
   rules: readonly HighImpactRule[] = HIGH_IMPACT_RULES,
@@ -156,12 +137,12 @@ export function classify(
     .map((rule) => rule.check(facts, policy))
     .filter((reason) => reason !== undefined)
     .map((text): Reason => ({ source: "rule", text }));
-  const fromModel = plan.highImpact.reasons.map((text): Reason => ({
+  const fromModel = assessment.reasons.map((text): Reason => ({
     source: "model",
     text,
   }));
   return {
-    highImpact: plan.highImpact.value || fromRules.length > 0,
+    highImpact: assessment.value || fromRules.length > 0,
     reasons: [...fromRules, ...fromModel],
   };
 }

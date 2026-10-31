@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { issueOfBranch, newStubBranch } from "./branch.ts";
+import { branchType, issueOfBranch, newRunBranch, slugOf } from "./branch.ts";
 import { filterEvent } from "./filter.ts";
 
 const REPO = "owner/demo";
@@ -103,12 +103,36 @@ describe("issueOfBranch", () => {
   });
 });
 
-describe("newStubBranch", () => {
-  it("picks a name that no branch has", async () => {
-    const taken = new Set(["chore/5-stub-run", "chore/5-stub-run-2"]);
-    const name = await newStubBranch(5, (candidate) =>
-      Promise.resolve(taken.has(candidate)),
+describe("newRunBranch", () => {
+  it("names the branch after the commit type and the issue title", async () => {
+    const name = await newRunBranch(
+      { type: "feat", issue: 5, title: "Dodaj rabat: 10% od 100 zł!" },
+      () => Promise.resolve(false),
     );
-    expect(name).toBe("chore/5-stub-run-3");
+    expect(name).toBe("feat/5-dodaj-rabat-10-od-100-zl");
+    expect(issueOfBranch(name)).toBe(5);
+  });
+
+  it("picks a name that no branch has", async () => {
+    const taken = new Set(["fix/5-blad", "fix/5-blad-2"]);
+    const name = await newRunBranch(
+      { type: "fix", issue: 5, title: "Błąd" },
+      (candidate) => Promise.resolve(taken.has(candidate)),
+    );
+    expect(name).toBe("fix/5-blad-3");
+  });
+
+  it.each([
+    ["test", "chore"],
+    ["perf", "chore"],
+    ["docs", "docs"],
+  ])("makes a %s commit a %s branch", (type, branch) => {
+    expect(branchType(type)).toBe(branch);
+  });
+
+  it("keeps a slug short and never empty", () => {
+    expect(slugOf("Ąę ".repeat(30))).toHaveLength(40);
+    expect(slugOf("!!! 🚀 ???")).toBe("change");
+    expect(slugOf("x".repeat(39) + " y")).toBe("x".repeat(39));
   });
 });

@@ -1,0 +1,43 @@
+name: Scope gate
+
+# The scope gate (QG-7.9), called from the gates workflow of the demo
+# repository on its pull_request events. Every file that a run's pull request
+# changes must be in the newest plan that the pipeline's app posted on the
+# issue; other pull requests pass. The job reads only public data with the
+# read-only workflow token, so it needs no secret and works for forks, and it
+# may not create check runs or commit statuses (QG-7.14).
+on:
+  workflow_call:
+    inputs:
+      pipeline-ref:
+        description: Commit of this repository whose code the job runs.
+        required: true
+        type: string
+      app-id:
+        description: ID of the pipeline's GitHub App, the author of the plan comments.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SDLC_APP_ID: ${{ inputs.app-id }}
+        run: npm run --silent --prefix pipeline scope-gate

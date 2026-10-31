@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ClaudeRoleRunner, spawnProcess } from "../agents/claude-runner.ts";
+import { developerSession } from "../agents/developer/session.ts";
 import { plannerSession } from "../agents/planner/session.ts";
 import type { RoleRunner } from "../agents/role-runner.ts";
 import { loadRoleSettings } from "../agents/roles-config.ts";
@@ -16,7 +17,13 @@ import {
 import { parseOrgBaseline } from "../config/parse.ts";
 import type { OrgBaseline } from "../config/schema.ts";
 import { CommentRunStateStore } from "../core/run-store/comment-store.ts";
+import { GitWorkspace } from "../git/git-workspace.ts";
+import type { RunWorkspace } from "../git/workspace.ts";
 import { createGitHub, type GitHub } from "../github/client.ts";
+import {
+  SandboxedCommandRunner,
+  type CommandRunner,
+} from "../hooks/commands.ts";
 import type { JobContext } from "./context.ts";
 import type { GitHubEvent } from "./filter.ts";
 
@@ -99,13 +106,41 @@ export async function claudeRunner(): Promise<RoleRunner> {
   return new ClaudeRoleRunner({
     workspace: env("SDLC_WORKSPACE"),
     sessionsDir: env("SDLC_SESSIONS_DIR"),
+    protect: [env("RUNNER_TEMP")],
     baseline: await loadBaseline(),
     token: env("CLAUDE_CODE_OAUTH_TOKEN"),
-    sessions: { planner: plannerSession },
+    sessions: { planner: plannerSession, developer: developerSession },
     settings: loadRoleSettings,
     runProcess: spawnProcess,
     parentEnv: process.env,
   });
+}
+
+// The workspace of a Developer job. The job's git directory sits in the
+// runner's temporary directory, which sessions may not write (plan 3.4).
+// Commits name the app's bot user, from the slug that the token step gives.
+export function gitWorkspace(): RunWorkspace {
+  const bot = `${env("SDLC_APP_SLUG")}[bot]`;
+  return new GitWorkspace({
+    workspace: env("SDLC_WORKSPACE"),
+    gitDir: path.join(env("RUNNER_TEMP"), "sdlc-git"),
+    serverUrl: env("GITHUB_SERVER_URL"),
+    token: env("SDLC_APP_TOKEN"),
+    identity: { name: bot, email: `${bot}@users.noreply.github.com` },
+    parentEnv: process.env,
+  });
+}
+
+// The install command of a Developer job, in bubblewrap with the network and
+// without the job's tokens (plan 3.4).
+const INSTALL_TIMEOUT_MS = 10 * 60_000;
+
+export function installer(): CommandRunner {
+  return new SandboxedCommandRunner(
+    env("SDLC_WORKSPACE"),
+    INSTALL_TIMEOUT_MS,
+    true,
+  );
 }
 
 export async function wait(ms: number, signal?: AbortSignal): Promise<void> {

@@ -161,7 +161,14 @@ export const TRANSITIONS: readonly TransitionRule[] = [
     from: ["developing"],
     event: "pushed",
     apply: (progress, event) =>
-      enter({ ...progress, pushedSha: event.sha }, "gating"),
+      enter(
+        {
+          ...progress,
+          pushedSha: event.sha,
+          planVersion: event.planVersion ?? progress.planVersion,
+        },
+        "gating",
+      ),
   }),
   rule({
     name: "plan-update-to-approval",

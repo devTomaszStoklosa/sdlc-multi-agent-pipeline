@@ -80,10 +80,8 @@ export const HOOK_EVENTS: ReadonlyMap<string, HookEvent> = new Map([
       name: "Stop",
       timeoutSeconds: 900,
       commandTimeoutMs: 420_000,
-      handle: (input, context, dependencies) => {
-        stopEvent.parse(input);
-        return handleStop(context, dependencies);
-      },
+      handle: (input, context, dependencies) =>
+        handleStop(stopEvent.parse(input), context, dependencies),
     },
   ],
 ] as const);

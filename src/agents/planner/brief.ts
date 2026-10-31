@@ -17,6 +17,7 @@ export interface BranchDiff {
 // What the job gathers for a Planner session: only the data the task needs
 // (SEC-8.10). All of it is untrusted (SEC-8.5).
 export interface PlannerBrief {
+  kind: "planner";
   // Comments of people with write permission (FR-4.23), oldest first.
   comments: BriefComment[];
   // Earlier versions of the plan of every run of the issue (FR-4.6).

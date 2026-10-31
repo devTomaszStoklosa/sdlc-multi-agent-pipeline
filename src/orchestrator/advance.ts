@@ -23,7 +23,11 @@ function eventOf(outcome: RoleOutcome): RunEvent {
         highImpact: outcome.highImpact,
       };
     case "pushed":
-      return { type: "pushed", sha: outcome.sha };
+      return {
+        type: "pushed",
+        sha: outcome.sha,
+        planVersion: outcome.planVersion,
+      };
     case "verdict":
       return {
         type: "verdict",

@@ -1,4 +1,5 @@
-import { randomBytes } from "node:crypto";
+import { briefOf } from "../brief.ts";
+import { cut, dataSection, type DataPiece } from "../prompt-data.ts";
 import type { RoleInput } from "../role-runner.ts";
 import type { BranchDiff, PlannerBrief } from "./brief.ts";
 
@@ -7,16 +8,11 @@ const MAX_TEXT = 20_000;
 const MAX_COMMENT = 8000;
 const MAX_DIFF = 60_000;
 
-const EMPTY: PlannerBrief = { comments: [], previousPlans: [] };
-
-function cut(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max)}\n[... truncated]`;
-}
-
-// A random value for the data tags, so the data cannot close its own tag.
-export function newNonce(): string {
-  return randomBytes(12).toString("hex");
-}
+const EMPTY: PlannerBrief = {
+  kind: "planner",
+  comments: [],
+  previousPlans: [],
+};
 
 function diffText(diff: BranchDiff): string {
   const files = diff.files.map(
@@ -26,32 +22,37 @@ function diffText(diff: BranchDiff): string {
   return cut(files.join("\n\n"), MAX_DIFF);
 }
 
-function pieces(input: RoleInput): [string, string][] {
-  const brief = input.brief ?? EMPTY;
+function pieces(input: RoleInput): DataPiece[] {
+  const brief = briefOf(input.brief, "planner") ?? EMPTY;
   const { stopSummary, branchDiff } = brief;
   return [
     ["issue title", input.issue.title],
     ["issue body", cut(input.issue.body, MAX_TEXT)],
-    ...brief.comments.map((comment): [string, string] => [
+    ...brief.comments.map((comment): DataPiece => [
       `comment by ${comment.author} at ${comment.at}`,
       cut(comment.body, MAX_COMMENT),
     ]),
-    ...brief.previousPlans.map((plan): [string, string] => [
+    ...brief.previousPlans.map((plan): DataPiece => [
       `earlier plan version posted at ${plan.at}`,
       cut(plan.body, MAX_TEXT),
     ]),
     ...(stopSummary === undefined
       ? []
-      : [["stop summary of the previous run", cut(stopSummary, MAX_COMMENT)]]),
+      : [
+          [
+            "stop summary of the previous run",
+            cut(stopSummary, MAX_COMMENT),
+          ] as const,
+        ]),
     ...(branchDiff === undefined
       ? []
       : [
           [
             `diff of branch ${branchDiff.branch} against ${branchDiff.base}`,
             diffText(branchDiff),
-          ],
+          ] as const,
         ]),
-  ] as [string, string][];
+  ];
 }
 
 // The prompt of a Planner session: the instructions from prompts/, then the
@@ -61,14 +62,10 @@ export function plannerPrompt(
   instructions: string,
   nonce: string,
 ): string {
-  const tag = `data-${nonce}`;
   return [
     instructions.trim(),
     "## This run",
     `Issue #${String(input.issue.number)}, run ${input.runId}. You write version ${String(input.planVersion + 1)} of the plan. The working directory holds the repository's main branch.`,
-    `Untrusted data follows, each piece in a <${tag}> tag.`,
-    ...pieces(input).map(
-      ([source, text]) => `<${tag} source="${source}">\n${text}\n</${tag}>`,
-    ),
+    ...dataSection(pieces(input), nonce),
   ].join("\n\n");
 }

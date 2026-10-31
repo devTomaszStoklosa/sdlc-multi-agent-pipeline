@@ -6,7 +6,7 @@ import type {
   ChangedFile,
   CheckRunsPort,
   ContentsPort,
-  FileChange,
+  WorkflowJobInfo,
   WorkflowRunInfo,
   WorkflowRunsPort,
 } from "./ports.ts";
@@ -70,6 +70,27 @@ export class GitHubWorkflowRuns extends RepoApi implements WorkflowRunsPort {
     };
   }
 
+  async listJobs(runId: number): Promise<WorkflowJobInfo[]> {
+    const jobs = await this.octokit.paginate(
+      this.octokit.rest.actions.listJobsForWorkflowRun,
+      { ...this.repo, run_id: runId, filter: "latest", per_page: 100 },
+    );
+    return jobs.map((job) => ({
+      id: job.id,
+      name: job.name,
+      conclusion: job.conclusion,
+    }));
+  }
+
+  async jobLog(jobId: number): Promise<string> {
+    const { data } =
+      await this.octokit.rest.actions.downloadJobLogsForWorkflowRun({
+        ...this.repo,
+        job_id: jobId,
+      });
+    return typeof data === "string" ? data : String(data);
+  }
+
   // A run that has already completed cannot be cancelled (409).
   async cancelRun(id: number): Promise<void> {
     try {
@@ -129,6 +150,7 @@ export class GitHubContents extends RepoApi implements ContentsPort {
     });
     return (data.files ?? []).map((file) => ({
       path: file.filename,
+      previousPath: file.previous_filename,
       additions: file.additions,
       deletions: file.deletions,
       patch: file.patch,
@@ -151,29 +173,6 @@ export class GitHubContents extends RepoApi implements ContentsPort {
       if (hasStatus(error, 404)) return false;
       throw error;
     }
-  }
-
-  async createBranch(name: string, sha: string): Promise<void> {
-    await this.octokit.rest.git.createRef({
-      ...this.repo,
-      ref: `refs/heads/${name}`,
-      sha,
-    });
-  }
-
-  async writeFile(change: FileChange): Promise<string> {
-    const existing = await this.file(change.path, change.branch);
-    const { data } = await this.octokit.rest.repos.createOrUpdateFileContents({
-      ...this.repo,
-      path: change.path,
-      branch: change.branch,
-      message: change.message,
-      content: Buffer.from(change.content, "utf8").toString("base64"),
-      sha: existing?.sha,
-    });
-    const sha = data.commit.sha;
-    if (sha === undefined) throw new Error("GitHub returned no commit SHA.");
-    return sha;
   }
 
   private async file(

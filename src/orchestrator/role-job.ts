@@ -1,4 +1,4 @@
-import type { PlannerBrief } from "../agents/planner/brief.ts";
+import type { RoleBrief } from "../agents/brief.ts";
 import {
   roleResultSchema,
   type RoleInput,
@@ -8,9 +8,13 @@ import {
 } from "../agents/role-runner.ts";
 import type { Run, RunRecord } from "../core/run-store/run-record.ts";
 import { roleOf } from "../core/state-machine/states.ts";
+import type { RunWorkspace } from "../git/workspace.ts";
+import type { CommandRunner } from "../hooks/commands.ts";
 import type { Role } from "../hooks/roles.ts";
 import { guardFor, type JobContext } from "./context.ts";
+import { developerBrief } from "./developer-brief.ts";
 import { RunInactiveError } from "./guard.ts";
+import { StageError } from "./stage-error.ts";
 import { remainingMinutes, runLimits } from "./limits.ts";
 import { plannerBrief } from "./planner-brief.ts";
 import {
@@ -27,15 +31,18 @@ export interface RoleJobContext extends JobContext {
   stopWatch: { intervalMs: number; wait: Wait };
   // The pipeline's app, the author of its own comments.
   appId: number;
+  // The checkout of the connected repository and its install command, for a
+  // Developer job.
+  workspace: RunWorkspace;
+  installer: CommandRunner;
+  // The name of the repository's gates workflow (plan 3.5).
+  gatesWorkflow: string;
 }
 
-type Brief = (
-  context: RoleJobContext,
-  record: RunRecord,
-) => Promise<PlannerBrief>;
+type Brief = (context: RoleJobContext, record: RunRecord) => Promise<RoleBrief>;
 
-// What the job gathers for a role before its session (SEC-8.10). The other
-// roles get their context in P6 and P7.
+// What the job gathers for a role before its session (SEC-8.10). The
+// Reviewer gets its context in P7.
 const BRIEFS: Partial<Record<Role, Brief>> = {
   planner: (context, record) =>
     plannerBrief(
@@ -46,6 +53,20 @@ const BRIEFS: Partial<Record<Role, Brief>> = {
         contents: context.app.contents,
         appId: context.appId,
         repository: context.repository,
+      },
+      record,
+    ),
+  developer: (context, record) =>
+    developerBrief(
+      {
+        comments: context.app.comments,
+        contents: context.app.contents,
+        runs: context.read.runs,
+        workspace: context.workspace,
+        installer: context.installer,
+        baseline: context.baseline,
+        appId: context.appId,
+        gatesWorkflow: context.gatesWorkflow,
       },
       record,
     ),
@@ -218,8 +239,29 @@ async function work(
   const guard = guardFor(context, record.issue, run.id);
   await guard.ensure("role session", { state: run.progress.state });
   const issue = await context.read.issues.getIssue(record.issue);
-  const brief = await BRIEFS[role]?.(context, record);
-  const scope: EffectScope = { context, guard, run, issue, brief };
+  let brief: RoleBrief | undefined;
+  try {
+    brief = await BRIEFS[role]?.(context, record);
+  } catch (error) {
+    if (!(error instanceof StageError)) throw error;
+    return {
+      status: "done",
+      role,
+      runId: run.id,
+      attempts: 1,
+      usage: NO_USAGE,
+      outcome: { kind: "failed", failure: "infra", message: error.message },
+    };
+  }
+  const scope: EffectScope = {
+    context,
+    guard,
+    run,
+    issue,
+    brief,
+    workspace: role === "developer" ? context.workspace : undefined,
+    previousPr: record.previousRuns.findLast((earlier) => earlier.pr)?.pr,
+  };
   const { pushedSha } = run.progress;
   if (role === "reviewer" && pushedSha !== undefined) {
     scope.checkRunId = await guard.perform("agent-review start", () =>

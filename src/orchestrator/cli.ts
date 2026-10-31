@@ -36,6 +36,8 @@ import {
   env,
   github,
   githubEvent,
+  gitWorkspace,
+  installer,
   jobContext,
   loadBaseline,
   setOutputs,
@@ -102,11 +104,11 @@ async function decideCommand(given: Args): Promise<void> {
 
 const stub = () => Promise.resolve(new StubRoleRunner());
 
-// The Planner runs on Claude Code; the Developer and the Reviewer stay stubs
-// until P6 and P7.
+// The Planner and the Developer run on Claude Code; the Reviewer stays a stub
+// until P7.
 const RUNNERS: Record<Role, () => Promise<RoleRunner>> = {
   planner: claudeRunner,
-  developer: stub,
+  developer: claudeRunner,
   reviewer: stub,
 };
 
@@ -123,6 +125,9 @@ async function roleCommand(given: Args): Promise<void> {
       runner: await RUNNERS[role](),
       stopWatch: { intervalMs: STOP_WATCH_MS, wait },
       appId: appId(),
+      workspace: gitWorkspace(),
+      installer: installer(),
+      gatesWorkflow: env("SDLC_GATES_WORKFLOW"),
     },
     given.issue,
     role,

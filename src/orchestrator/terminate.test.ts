@@ -176,12 +176,12 @@ describe("after the end of a run", () => {
         await stop(repo, "issue");
         await repo.github.removeLabel(1, "agent:stop");
       },
-      "chore/1-stub-run",
+      "chore/1-add-a-discount",
     ],
     [
       "on a new branch after the pull request closed unmerged",
       (repo: Harness) => close(repo, false),
-      "chore/1-stub-run-2",
+      "chore/1-add-a-discount-2",
     ],
   ])("starts a new run %s (FR-4.28b)", async (_name, end, branch) => {
     const repo = await runIn("gating");
@@ -193,6 +193,36 @@ describe("after the end of a run", () => {
     const run = await repo.run(1);
     expect(run.id).toBe("1-2");
     expect(run.branch).toBe(branch);
+  });
+
+  // The job merges the main branch into the continued branch before the
+  // session, and a new pull request links the closed one (FR-4.28b).
+  it("merges the main branch into the continued branch", async () => {
+    const repo = await runIn("gating");
+    await stop(repo, "issue");
+    await repo.github.removeLabel(1, "agent:stop");
+    await repo.label(1, "agent:ready");
+    expect(repo.workspace.prepared.at(-1)).toEqual({
+      branch: "chore/1-add-a-discount",
+      merge: {
+        main: "main",
+        message: "chore: merge main into chore/1-add-a-discount (#1)",
+      },
+    });
+  });
+
+  it("links the closed pull request from the new one", async () => {
+    const repo = await runIn("gating");
+    const closed = (await repo.run(1)).pr;
+    await close(repo, false);
+    await repo.label(1, "agent:ready");
+    expect(repo.workspace.prepared.at(-1)).toEqual({
+      branch: undefined,
+      merge: undefined,
+    });
+    expect(repo.github.drafts.at(-1)?.body).toContain(
+      `- **Poprzedni PR:** #${String(closed)}`,
+    );
   });
 
   it("refuses agent:ready while the open pull request has agent:stop", async () => {

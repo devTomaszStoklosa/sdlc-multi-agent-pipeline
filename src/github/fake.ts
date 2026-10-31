@@ -1,4 +1,5 @@
 import type { GitHub } from "./client.ts";
+import { FakeWorkflowRuns } from "./fake-runs.ts";
 import type {
   ChangedFile,
   CheckConclusion,
@@ -6,7 +7,7 @@ import type {
   CheckRunsPort,
   CommentsPort,
   ContentsPort,
-  FileChange,
+  CreatedIssue,
   IssueComment,
   IssueInfo,
   IssuesPort,
@@ -16,8 +17,6 @@ import type {
   PermissionsPort,
   PullRequestInfo,
   PullRequestsPort,
-  WorkflowRunInfo,
-  WorkflowRunsPort,
 } from "./ports.ts";
 
 interface FakeCheckRun {
@@ -28,23 +27,18 @@ interface FakeCheckRun {
   output?: CheckOutput;
 }
 
-interface FakeRun extends WorkflowRunInfo {
-  name?: string;
-  headSha?: string;
-}
-
 export const FAKE_REPOSITORY = "owner/demo";
 
 // GitHub in memory for tests. Every write is recorded in `writes`, so a test
 // can check that nothing happened after a run stopped.
 export class FakeGitHub
+  extends FakeWorkflowRuns
   implements
     PermissionsPort,
     CommentsPort,
     IssuesPort,
     PullRequestsPort,
     CheckRunsPort,
-    WorkflowRunsPort,
     ContentsPort
 {
   readonly appId = 7;
@@ -55,22 +49,19 @@ export class FakeGitHub
   readonly labelEvents: { issue: number; label: string; event: LabelEvent }[] =
     [];
   readonly checkRuns = new Map<number, FakeCheckRun>();
-  readonly runs = new Map<number, FakeRun>();
   readonly branches = new Map<string, string>([["main", "0000000"]]);
   readonly files = new Map<string, string>();
   // The files each branch changes against `main`, by branch name.
   readonly diffs = new Map<string, ChangedFile[]>();
+  readonly drafts: NewPullRequest[] = [];
   readonly writes: string[] = [];
   // Whether a write by the app counts as a comment of the app.
   commentAppId: number | undefined = this.appId;
-  // Hooks that tests use to change GitHub between two calls.
-  onCancel: (id: number) => void = (id) => {
-    this.completeRun(id, "cancelled");
-  };
   private nextId = 1000;
   private readonly clock: () => Date;
 
   constructor(clock: () => Date = () => new Date()) {
+    super();
     this.clock = clock;
   }
 
@@ -109,6 +100,7 @@ export class FakeGitHub
       headRepo: FAKE_REPOSITORY,
       labels: [],
       url: `https://github.test/pull/${String(fields.number)}`,
+      body: "",
       ...fields,
     };
     this.pulls.set(pull.number, pull);
@@ -123,20 +115,6 @@ export class FakeGitHub
       label,
       event: { actor, at: this.clock().toISOString() },
     });
-  }
-
-  addRun(id: number, fields: Partial<FakeRun> = {}): void {
-    this.runs.set(id, {
-      id,
-      status: "in_progress",
-      conclusion: null,
-      ...fields,
-    });
-  }
-
-  completeRun(id: number, conclusion: string): void {
-    const run = this.runs.get(id);
-    if (run) Object.assign(run, { status: "completed", conclusion });
   }
 
   // PermissionsPort
@@ -186,6 +164,16 @@ export class FakeGitHub
     return Promise.resolve(structuredClone(found));
   }
 
+  createIssue(title: string, body: string): Promise<CreatedIssue> {
+    const number = this.nextId++;
+    this.writes.push(`issue #${String(number)}`);
+    this.addIssue(number, { title, body });
+    return Promise.resolve({
+      number,
+      url: `https://github.test/issues/${String(number)}`,
+    });
+  }
+
   listOpenIssuesWithLabel(label: string): Promise<number[]> {
     const numbers = [...this.issues.values()]
       .filter((issue) => issue.state === "open" && issue.labels.includes(label))
@@ -231,11 +219,25 @@ export class FakeGitHub
 
   createDraftPull(pull: NewPullRequest): Promise<PullRequestInfo> {
     this.writes.push(`pull ${pull.head}`);
+    this.drafts.push(pull);
     const number = this.nextId++;
     const sha = this.branches.get(pull.head) ?? "0000000";
     return Promise.resolve(
-      this.addPull({ number, headRef: pull.head, headSha: sha }),
+      this.addPull({
+        number,
+        headRef: pull.head,
+        headSha: sha,
+        body: pull.body,
+      }),
     );
+  }
+
+  updatePullBody(pull: number, body: string): Promise<void> {
+    this.writes.push(`pull body #${String(pull)}`);
+    const found = this.pulls.get(pull);
+    if (found === undefined) throw new Error(`No pull request ${String(pull)}`);
+    found.body = body;
+    return Promise.resolve();
   }
 
   // CheckRunsPort
@@ -270,35 +272,6 @@ export class FakeGitHub
     return Promise.resolve(ids);
   }
 
-  // WorkflowRunsPort
-
-  getRun(id: number): Promise<WorkflowRunInfo> {
-    const run = this.runs.get(id);
-    if (run === undefined) throw new Error(`No workflow run ${String(id)}`);
-    return Promise.resolve({ ...run });
-  }
-
-  cancelRun(id: number): Promise<void> {
-    this.onCancel(id);
-    return Promise.resolve();
-  }
-
-  forceCancelRun(id: number): Promise<void> {
-    this.completeRun(id, "cancelled");
-    return Promise.resolve();
-  }
-
-  findRunForSha(
-    workflowName: string,
-    sha: string,
-  ): Promise<WorkflowRunInfo | undefined> {
-    const run = [...this.runs.values()].findLast(
-      (candidate) =>
-        candidate.name === workflowName && candidate.headSha === sha,
-    );
-    return Promise.resolve(run && { ...run });
-  }
-
   // ContentsPort
 
   defaultBranch(): Promise<{ name: string; sha: string }> {
@@ -318,23 +291,6 @@ export class FakeGitHub
 
   branchExists(name: string): Promise<boolean> {
     return Promise.resolve(this.branches.has(name));
-  }
-
-  createBranch(name: string, sha: string): Promise<void> {
-    this.writes.push(`branch ${name}`);
-    this.branches.set(name, sha);
-    return Promise.resolve();
-  }
-
-  writeFile(change: FileChange): Promise<string> {
-    this.writes.push(`push ${change.branch}`);
-    const sha = (this.nextId++).toString(16).padStart(7, "a");
-    this.branches.set(change.branch, sha);
-    this.files.set(`${change.branch}:${change.path}`, change.content);
-    for (const pull of this.pulls.values()) {
-      if (pull.headRef === change.branch) pull.headSha = sha;
-    }
-    return Promise.resolve(sha);
   }
 
   private labelTarget(issue: number): { labels: string[] } {

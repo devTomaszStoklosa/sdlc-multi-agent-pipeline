@@ -5,7 +5,12 @@ export interface SettingsOptions {
   hookCommand: readonly [string, ...string[]];
   contextPath: string;
   allowedHosts: readonly string[];
+  // Absolute paths of the job that shell commands may not write: the code of
+  // the hooks, the session files and the job's own files.
+  protectedPaths: readonly string[];
 }
+
+const TOOL_CONFIGURATION = ["~/.claude", "~/.config", "~/.npmrc"];
 
 // Claude Code settings for an agent session (plan 3.4). Every hook event runs
 // the pipeline hooks, and a hook that cannot start or times out blocks the
@@ -13,10 +18,12 @@ export interface SettingsOptions {
 // the workspace and connections to the allowed hosts, and hides the token from
 // them (SEC-9.0c, SEC-8.4). The sandbox also denies writes to the
 // configuration that tools in the home directory read later and that can run
-// code, such as Claude Code's own settings. It cannot deny the whole home
-// directory, because the sandbox creates its own guards for shell startup
-// files there. The session must load no project settings, so a repository
-// cannot weaken these ones.
+// code, such as Claude Code's own settings, and writes to the paths of the
+// job: the pipeline's code with the hooks, the session files and the job's
+// temporary files, which all sit in the runner's home directory next to the
+// workspace. It cannot deny the whole home directory, because the sandbox
+// creates its own guards for shell startup files there. The session must load
+// no project settings, so a repository cannot weaken these ones.
 export function claudeSettings(options: SettingsOptions): object {
   const [program, ...programArgs] = options.hookCommand;
   const hooks = Object.fromEntries(
@@ -46,7 +53,11 @@ export function claudeSettings(options: SettingsOptions): object {
       failIfUnavailable: true,
       allowUnsandboxedCommands: false,
       network: { allowedDomains: [...options.allowedHosts] },
-      filesystem: { denyWrite: ["~/.claude", "~/.config", "~/.npmrc"] },
+      filesystem: {
+        denyWrite: [
+          ...new Set([...TOOL_CONFIGURATION, ...options.protectedPaths]),
+        ],
+      },
       credentials: {
         envVars: [{ name: "CLAUDE_CODE_OAUTH_TOKEN", mode: "deny" }],
       },

@@ -2,6 +2,7 @@ import type { Octokit } from "@octokit/rest";
 import {
   PERMISSION_LEVELS,
   type CommentsPort,
+  type CreatedIssue,
   type IssueComment,
   type IssueInfo,
   type IssuesPort,
@@ -150,6 +151,15 @@ export class GitHubIssues extends RepoApi implements IssuesPort {
     };
   }
 
+  async createIssue(title: string, body: string): Promise<CreatedIssue> {
+    const { data } = await this.octokit.rest.issues.create({
+      ...this.repo,
+      title,
+      body,
+    });
+    return { number: data.number, url: data.html_url };
+  }
+
   async listOpenIssuesWithLabel(label: string): Promise<number[]> {
     const issues = await this.octokit.paginate(
       this.octokit.rest.issues.listForRepo,
@@ -209,6 +219,7 @@ interface RawPull {
   head: { ref: string; sha: string; repo: { full_name: string } | null };
   labels: Label[];
   html_url: string;
+  body: string | null;
 }
 
 function toPull(pull: RawPull): PullRequestInfo {
@@ -221,6 +232,7 @@ function toPull(pull: RawPull): PullRequestInfo {
     headRepo: pull.head.repo?.full_name,
     labels: labelNames(pull.labels),
     url: pull.html_url,
+    body: pull.body ?? "",
   };
 }
 
@@ -249,5 +261,13 @@ export class GitHubPulls extends RepoApi implements PullRequestsPort {
       draft: true,
     });
     return toPull(data);
+  }
+
+  async updatePullBody(pull: number, body: string): Promise<void> {
+    await this.octokit.rest.pulls.update({
+      ...this.repo,
+      pull_number: pull,
+      body,
+    });
   }
 }
