@@ -14,6 +14,7 @@ const resultSchema = z.looseObject({
 });
 
 const recordSchema = z.looseObject({
+  tool: z.string().optional(),
   decision: z.string(),
   blocks: z.array(z.looseObject({ category: z.string() })).optional(),
   redactions: z.number().optional(),
@@ -40,7 +41,12 @@ function sessionLines(result: SessionResult): string[] {
   ];
 }
 
-function auditLines(records: readonly AuditRecord[]): string[] {
+// The Stop hook writes its decisions to the same log as the tool calls.
+const STOP_HOOK = "Stop";
+
+function auditLines(all: readonly AuditRecord[]): string[] {
+  const records = all.filter((record) => record.tool !== STOP_HOOK);
+  const stops = all.filter((record) => record.tool === STOP_HOOK);
   const categories = records.flatMap((record) =>
     (record.blocks ?? []).map((block) => block.category),
   );
@@ -50,6 +56,7 @@ function auditLines(records: readonly AuditRecord[]): string[] {
   );
   return [
     `- Tool calls: ${countBy(records.map((record) => record.decision))}`,
+    `- Stop hook: ${countBy(stops.map((record) => record.decision))}`,
     `- Blocks by category: ${countBy(categories)}`,
     `- Redactions in tool output: ${String(redactions)}`,
   ];
