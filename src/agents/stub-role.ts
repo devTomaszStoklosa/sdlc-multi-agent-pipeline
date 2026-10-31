@@ -54,31 +54,37 @@ function planner(scenario: Scenario, input: RoleInput): RoleOutput {
   };
 }
 
-// A passing push writes formatted JSON, a failing one compact JSON, which the
-// formatting gate rejects.
+// The stub Developer changes no file itself: in the tests, the workspace in
+// memory holds the changes that the job commits.
 function developer(scenario: Scenario, input: RoleInput): RoleOutput {
-  if (scenario.plan_update && input.pushes === 0 && input.planVersion === 1) {
-    return {
-      role: "developer",
-      change: {
-        kind: "plan-update",
-        highImpact: true,
-        text: "Zaślepka aktualizuje plan do zmiany high-impact (FR-4.11).",
-      },
-    };
-  }
   const push = input.pushes + 1;
-  const data = { run: input.runId, push };
-  const fails = pick(scenario.gates, input.pushes) === "fail";
+  const updates =
+    scenario.plan_update !== undefined &&
+    input.pushes === 0 &&
+    input.planVersion === 1;
   return {
     role: "developer",
-    change: {
-      kind: "push",
-      path: `stub-runs/issue-${String(input.issue.number)}.json`,
-      content: fails
-        ? JSON.stringify(data)
-        : `${JSON.stringify(data, null, 2)}\n`,
-      message: `chore: record stub push ${String(push)} of run ${input.runId} (#${String(input.issue.number)})`,
+    work: {
+      commit: {
+        type: "chore",
+        subject: `record stub push ${String(push)} of run ${input.runId}`,
+      },
+      summary: "Zaślepka Developera bez modelu.",
+      outOfScope: [],
+      planUpdate: updates
+        ? {
+            reason:
+              "Zaślepka aktualizuje plan do zmiany high-impact (FR-4.11).",
+            files: [
+              {
+                path: "package.json",
+                change: "modify",
+                why: "Nowa zależność zaślepki.",
+              },
+            ],
+            highImpact: { value: true, reasons: ["Scenariusz zaślepki."] },
+          }
+        : undefined,
     },
   };
 }

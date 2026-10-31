@@ -8,7 +8,6 @@ import type {
   CommentsPort,
   ContentsPort,
   CreatedIssue,
-  FileChange,
   IssueComment,
   IssueInfo,
   IssuesPort,
@@ -292,23 +291,6 @@ export class FakeGitHub
 
   branchExists(name: string): Promise<boolean> {
     return Promise.resolve(this.branches.has(name));
-  }
-
-  createBranch(name: string, sha: string): Promise<void> {
-    this.writes.push(`branch ${name}`);
-    this.branches.set(name, sha);
-    return Promise.resolve();
-  }
-
-  writeFile(change: FileChange): Promise<string> {
-    this.writes.push(`push ${change.branch}`);
-    const sha = (this.nextId++).toString(16).padStart(7, "a");
-    this.branches.set(change.branch, sha);
-    this.files.set(`${change.branch}:${change.path}`, change.content);
-    for (const pull of this.pulls.values()) {
-      if (pull.headRef === change.branch) pull.headSha = sha;
-    }
-    return Promise.resolve(sha);
   }
 
   private labelTarget(issue: number): { labels: string[] } {

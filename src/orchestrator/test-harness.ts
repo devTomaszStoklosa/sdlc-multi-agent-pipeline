@@ -7,7 +7,9 @@ import { BASELINE } from "../config/fixtures.ts";
 import { CommentRunStateStore } from "../core/run-store/comment-store.ts";
 import type { RunRecord } from "../core/run-store/run-record.ts";
 import type { RunStateName } from "../core/state-machine/states.ts";
+import { MemoryWorkspace } from "../git/memory-workspace.ts";
 import { FAKE_REPOSITORY, FakeGitHub } from "../github/fake.ts";
+import type { WorkflowJobInfo } from "../github/ports.ts";
 import type { Role } from "../hooks/roles.ts";
 import { advance } from "./advance.ts";
 import { decide, type DecideContext } from "./decide.ts";
@@ -17,6 +19,8 @@ import { roleJobOutputSchema } from "./role-output.ts";
 import { CONFIG_PATH } from "./start-run.ts";
 
 export const REPO = FAKE_REPOSITORY;
+
+type GateJob = WorkflowJobInfo & { log: string };
 export const AUTHOR = { login: "author", type: "User" };
 export const CONFIG = `version: 1
 commands:
@@ -32,6 +36,7 @@ export class Harness {
   readonly store: CommentRunStateStore;
   // The roles of the role jobs; tests may replace them.
   runner: RoleRunner = new StubRoleRunner(() => Promise.resolve());
+  readonly workspace = new MemoryWorkspace();
   private time = new Date("2026-10-29T10:00:00Z");
   private nextRun = 100;
 
@@ -41,6 +46,12 @@ export class Harness {
     this.setConfig(config);
     this.github.permissions.set(AUTHOR.login, "admin");
     this.github.addIssue(1, { title: "Add a discount" });
+    this.workspace.onPush = (branch, sha) => {
+      this.github.branches.set(branch, sha);
+      for (const pull of this.github.pulls.values()) {
+        if (pull.headRef === branch) pull.headSha = sha;
+      }
+    };
   }
 
   setConfig(text: string): void {
@@ -76,6 +87,7 @@ export class Harness {
       gatesWorkflow: "Gates",
       runner: this.runner,
       appId: this.github.appId,
+      workspace: this.workspace,
       // Checks between the steps of a test, as the sessions here take no time.
       stopWatch: {
         intervalMs: 0,
@@ -151,14 +163,18 @@ export class Harness {
     });
   }
 
-  // The gates workflow finishes on the last push of the run.
+  // The gates workflow finishes on the last push of the run, with the given
+  // jobs and their logs.
   async gates(
     issue: number,
     conclusion: "success" | "failure",
+    jobs: GateJob[] = [],
   ): Promise<Role[]> {
     const run = await this.run(issue);
     const sha = run.progress.pushedSha ?? "";
-    this.github.addRun(this.nextRun++, {
+    const id = this.nextRun++;
+    this.github.jobs.set(id, jobs);
+    this.github.addRun(id, {
       name: "Gates",
       headSha: sha,
       status: "completed",

@@ -10,7 +10,7 @@ export interface GateFailure {
 export interface DeveloperBrief {
   kind: "developer";
   // The plan comment of the version the Developer implements (FR-4.3).
-  plan: { version: number; body: string };
+  plan: { version: number; body: string; url: string };
   // The run's branch, which the workspace holds, if the run has one.
   branch?: string;
   gateFailures: GateFailure[];

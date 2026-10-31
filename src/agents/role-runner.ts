@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Role } from "../hooks/roles.ts";
 import type { RoleBrief } from "./brief.ts";
+import { workSchema } from "./developer/work.ts";
 import { planSchema } from "./planner/plan.ts";
 
 // What a role session gets (plan 3.4). A session also gets the workspace,
@@ -36,21 +37,10 @@ const plannerOutput = z.strictObject({
   plan: planSchema,
 });
 
+// The Developer's changes stay in the workspace; the job commits them.
 const developerOutput = z.strictObject({
   role: z.literal("developer"),
-  change: z.discriminatedUnion("kind", [
-    z.strictObject({
-      kind: z.literal("push"),
-      path: z.string().min(1),
-      content: z.string(),
-      message: z.string().min(1),
-    }),
-    z.strictObject({
-      kind: z.literal("plan-update"),
-      highImpact: z.boolean(),
-      text: z.string().min(1),
-    }),
-  ]),
+  work: workSchema,
 });
 
 const reviewerOutput = z.strictObject({

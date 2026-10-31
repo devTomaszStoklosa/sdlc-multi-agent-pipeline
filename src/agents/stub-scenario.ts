@@ -15,11 +15,6 @@ const scenarioSchema = z.strictObject({
     .default(["normal"]),
   // The Developer's first stage updates the first plan to high-impact (FR-4.11).
   plan_update: z.literal("high-impact").optional(),
-  // Pushes that fail or pass the gates, through the formatting gate.
-  gates: z
-    .array(z.enum(["pass", "fail"]))
-    .min(1)
-    .default(["pass"]),
   verdicts: z
     .array(z.enum(["approve", "changes_requested"]))
     .min(1)
@@ -46,7 +41,7 @@ export type ScenarioResult =
   { ok: true; scenario: Scenario } | { ok: false; error: string };
 
 // The scenario is a hidden YAML block in the issue body. An issue without it
-// gets the default: a normal plan, passing gates and `approve`.
+// gets the default: a normal plan, a push and `approve`.
 export function parseScenario(issueBody: string): ScenarioResult {
   const text = BLOCK.exec(issueBody.replaceAll("\r\n", "\n"))?.[1] ?? "{}";
   const document = parseDocument(text, { uniqueKeys: true });

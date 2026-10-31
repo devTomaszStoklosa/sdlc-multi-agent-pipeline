@@ -19,6 +19,8 @@ export class MemoryWorkspace implements RunWorkspace {
   readonly prepared: PrepareSpec[] = [];
   readonly commits: string[] = [];
   readonly pushes: { branch: string; sha: string }[] = [];
+  // Lets the GitHub in memory see the pushed branch.
+  onPush: (branch: string, sha: string) => void = () => undefined;
   private next = 1;
 
   prepare(spec: PrepareSpec): Promise<string[]> {
@@ -42,6 +44,7 @@ export class MemoryWorkspace implements RunWorkspace {
   push(branch: string): Promise<string> {
     const sha = (this.next++).toString(16).padStart(7, "d");
     this.pushes.push({ branch, sha });
+    this.onPush(branch, sha);
     return Promise.resolve(sha);
   }
 }

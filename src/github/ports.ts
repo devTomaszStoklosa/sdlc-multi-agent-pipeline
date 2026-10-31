@@ -133,13 +133,6 @@ export interface WorkflowRunsPort {
   ): Promise<WorkflowRunInfo | undefined>;
 }
 
-export interface FileChange {
-  branch: string;
-  path: string;
-  content: string;
-  message: string;
-}
-
 export interface ChangedFile {
   path: string;
   // The earlier path of a renamed file.
@@ -157,7 +150,4 @@ export interface ContentsPort {
   compare(base: string, head: string): Promise<ChangedFile[]>;
   readFile(path: string, ref: string): Promise<string | undefined>;
   branchExists(name: string): Promise<boolean>;
-  createBranch(name: string, sha: string): Promise<void>;
-  // Commits one file on a branch and returns the new commit SHA.
-  writeFile(change: FileChange): Promise<string>;
 }

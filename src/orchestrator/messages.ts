@@ -49,6 +49,51 @@ export function escalation(run: Run, reason: EscalationReason): string {
   return `Przebieg ${run.id} wymaga decyzji człowieka: ${reasonText(reason)}. Zdejmij etykietę \`${run.labels.needs_human}\`, żeby wznowić przebieg od stanu \`${resume}\` (FR-4.32), albo dodaj \`${STOP_LABEL}\`, żeby go zatrzymać.`;
 }
 
-export function planUpdateComment(version: number, text: string): string {
-  return `### Aktualizacja planu, wersja ${String(version)}\n\n${text}`;
+// The body of an issue out of scope, with the Developer's description made
+// safe by the caller (FR-4.10).
+export function outOfScopeIssueBody(
+  description: string,
+  runId: string,
+  issue: number,
+): string {
+  return `${description}\n\n---\n\nZgłoszone przez Developera w przebiegu ${runId} issue #${String(issue)} (FR-4.10). PR tego przebiegu nie naprawia tego problemu.`;
+}
+
+function issueList(issues: readonly number[]): string {
+  return issues.map((number) => `#${String(number)}`).join(", ");
+}
+
+export interface PullBodyFacts {
+  issue: number;
+  runId: string;
+  // The Developer's summary, made safe by the caller.
+  summary: string;
+  plan: { version: number; url: string };
+  issues: readonly number[];
+  // The closed pull request of an earlier run (FR-4.28b).
+  previousPr?: number;
+}
+
+// The body of a run's draft pull request (FR-4.8, FR-4.10, FR-4.28b).
+export function pullBody(facts: PullBodyFacts): string {
+  return [
+    `Closes #${String(facts.issue)}`,
+    "",
+    facts.summary,
+    "",
+    `- **Plan:** [wersja ${String(facts.plan.version)}](${facts.plan.url})`,
+    ...(facts.issues.length === 0
+      ? []
+      : [`- **Issue spoza zakresu:** ${issueList(facts.issues)}`]),
+    ...(facts.previousPr === undefined
+      ? []
+      : [`- **Poprzedni PR:** #${String(facts.previousPr)}`]),
+    "",
+    `PR przebiegu ${facts.runId}, otwarty przez pipeline jako szkic.`,
+  ].join("\n");
+}
+
+// The issues out of scope of a later stage, added to the pull request body.
+export function pullBodyIssues(issues: readonly number[]): string {
+  return `\n- **Issue spoza zakresu z kolejnego etapu:** ${issueList(issues)}`;
 }

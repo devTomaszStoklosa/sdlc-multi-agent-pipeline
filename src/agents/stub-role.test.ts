@@ -39,14 +39,19 @@ async function run(given: RoleInput) {
 }
 
 describe("StubRoleRunner", () => {
-  it("defaults to a normal plan, a passing push and approve", async () => {
+  it("defaults to a normal plan, a push and approve", async () => {
     expect(await run(input("planner", ""))).toMatchObject({
       status: "ok",
       output: { plan: { highImpact: { value: false } } },
     });
     const push = await run(input("developer", ""));
     expect(push).toMatchObject({
-      output: { change: { kind: "push", path: "stub-runs/issue-12.json" } },
+      output: {
+        work: {
+          commit: { type: "chore", subject: "record stub push 1 of run 12-1" },
+          outOfScope: [],
+        },
+      },
     });
     expect(await run(input("reviewer", ""))).toMatchObject({
       output: { verdict: "approve", findings: [] },
@@ -65,26 +70,16 @@ describe("StubRoleRunner", () => {
     });
   });
 
-  it("writes unformatted JSON for a push that fails the gates", async () => {
-    const body = scenario("gates: [fail, pass]");
-    const failing = await run(input("developer", body));
-    const passing = await run(input("developer", body, { pushes: 1 }));
-    expect(failing).toMatchObject({
-      output: { change: { content: '{"run":"12-1","push":1}' } },
-    });
-    expect(passing).toMatchObject({
-      output: { change: { content: '{\n  "run": "12-1",\n  "push": 2\n}\n' } },
-    });
-  });
-
   it("updates the first plan before the first push", async () => {
     const body = scenario("plan_update: high-impact");
     const update = await run(input("developer", body, { planVersion: 1 }));
     expect(update).toMatchObject({
-      output: { change: { kind: "plan-update", highImpact: true } },
+      output: { work: { planUpdate: { highImpact: { value: true } } } },
     });
     const later = await run(input("developer", body, { planVersion: 2 }));
-    expect(later).toMatchObject({ output: { change: { kind: "push" } } });
+    expect(later).toMatchObject({
+      output: { work: { planUpdate: undefined } },
+    });
   });
 
   it("returns the verdicts by round, with new or repeated findings", async () => {
