@@ -67,7 +67,7 @@ describe("retries and escalation", () => {
     expect(await repo.state(1)).toBe("gating");
     expect(await repo.gates(1, "success")).toEqual(["reviewer"]);
     expect(await repo.state(1)).toBe("needs-human");
-    expect(repo.comments(1).at(-1)).toMatch(/drugi raz: stub-finding/);
+    expect(repo.comments(1).at(-1)).toMatch(/drugi raz: F-[0-9a-f]{12}/);
   });
 
   it("escalates after the configured number of review rounds", async () => {

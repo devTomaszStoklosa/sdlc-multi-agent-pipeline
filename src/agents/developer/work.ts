@@ -28,6 +28,9 @@ const MAX_TEXT = 3000;
 const MAX_TITLE = 120;
 const MAX_ISSUES = 5;
 const MAX_FILES = 60;
+const MAX_REPLIES = 30;
+const MAX_REPLY = 1500;
+const MAX_ID = 40;
 
 // What a Developer session returns besides its changes in the workspace. The
 // job commits the changes with a message it builds from `commit`, so every
@@ -72,10 +75,33 @@ const workShape = z.strictObject({
     })
     .optional()
     .describe("Only when the change needs files outside the plan (FR-4.11)."),
+  replies: z
+    .array(
+      z.strictObject({
+        finding: z.string().describe("The identifier of a review finding."),
+        reply: z.string().describe("Why the finding is wrong."),
+      }),
+    )
+    .optional()
+    .describe(
+      "Only for review findings you consider wrong, instead of changing the code (FR-4.15).",
+    ),
 });
 
 export type DeveloperWork = z.infer<typeof workShape>;
 export type PlanUpdate = NonNullable<DeveloperWork["planUpdate"]>;
+export type FindingReply = NonNullable<DeveloperWork["replies"]>[number];
+
+function replyChecks(
+  issues: z.core.$RefinementCtx<DeveloperWork>,
+  replies: readonly FindingReply[],
+): void {
+  checkCount(issues, "replies", replies.length, [0, MAX_REPLIES]);
+  for (const entry of replies) {
+    checkLine(issues, "replies.finding", entry.finding, MAX_ID);
+    checkText(issues, "replies.reply", entry.reply, MAX_REPLY);
+  }
+}
 
 function workChecks(
   work: DeveloperWork,
@@ -108,6 +134,7 @@ function workChecks(
     checkFiles(issues, planUpdate.files, MAX_FILES);
     checkHighImpact(issues, planUpdate.highImpact);
   }
+  replyChecks(issues, work.replies ?? []);
 }
 
 export const workSchema = workShape.superRefine(workChecks);

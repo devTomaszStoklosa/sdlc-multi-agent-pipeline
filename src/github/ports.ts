@@ -38,6 +38,8 @@ export interface IssueInfo {
   body: string;
   state: "open" | "closed";
   labels: string[];
+  // Whom the pipeline asks for the final review (FR-4.20).
+  assignees: string[];
 }
 
 export interface LabelEvent {
@@ -86,6 +88,49 @@ export interface PullRequestsPort {
   listOpenPulls(): Promise<PullRequestInfo[]>;
   createDraftPull(pull: NewPullRequest): Promise<PullRequestInfo>;
   updatePullBody(pull: number, body: string): Promise<void>;
+  // Ends the draft of a pull request (FR-4.20).
+  markReadyForReview(pull: number): Promise<void>;
+  requestReviewers(pull: number, logins: readonly string[]): Promise<void>;
+}
+
+// A comment of a new review: on a line of the new version of a file, or on
+// the whole file when `line` is undefined.
+export interface NewReviewComment {
+  path: string;
+  line?: number;
+  body: string;
+}
+
+export interface PullReview {
+  id: number;
+  authorLogin: string;
+  body: string;
+  url: string;
+}
+
+export interface PullReviewComment {
+  id: number;
+  authorLogin: string;
+  body: string;
+  // The comment that starts the thread of a reply.
+  inReplyTo?: number;
+}
+
+// Reviews of pull requests. A review only comments: the port cannot approve
+// or request changes, so no agent's review counts towards a merge (FR-5.2,
+// FR-6.2).
+export interface PullReviewsPort {
+  commentReview(
+    pull: number,
+    review: {
+      commitId: string;
+      body: string;
+      comments: readonly NewReviewComment[];
+    },
+  ): Promise<PullReview>;
+  listReviews(pull: number): Promise<PullReview[]>;
+  listReviewComments(pull: number): Promise<PullReviewComment[]>;
+  replyToComment(pull: number, commentId: number, body: string): Promise<void>;
 }
 
 export type CheckConclusion = "success" | "failure" | "cancelled";
@@ -111,6 +156,7 @@ export interface WorkflowRunInfo {
   id: number;
   status: string;
   conclusion: string | null;
+  url?: string;
 }
 
 export interface WorkflowJobInfo {

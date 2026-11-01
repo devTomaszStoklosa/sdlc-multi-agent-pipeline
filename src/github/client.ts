@@ -11,6 +11,7 @@ import {
   GitHubPulls,
   parseRepository,
 } from "./octokit-issues.ts";
+import { GitHubPullReviews } from "./octokit-reviews.ts";
 import type {
   CheckRunsPort,
   CommentsPort,
@@ -18,6 +19,7 @@ import type {
   IssuesPort,
   PermissionsPort,
   PullRequestsPort,
+  PullReviewsPort,
   WorkflowRunsPort,
 } from "./ports.ts";
 
@@ -26,6 +28,7 @@ export interface GitHub {
   comments: CommentsPort;
   issues: IssuesPort;
   pulls: PullRequestsPort;
+  reviews: PullReviewsPort;
   checks: CheckRunsPort;
   runs: WorkflowRunsPort;
   contents: ContentsPort;
@@ -59,6 +62,7 @@ export function createGitHub(options: ClientOptions): GitHub {
     comments: new GitHubComments(octokit, repo),
     issues: new GitHubIssues(octokit, repo),
     pulls: new GitHubPulls(octokit, repo),
+    reviews: new GitHubPullReviews(octokit, repo),
     checks: new GitHubCheckRuns(octokit, repo, options.appId),
     runs: new GitHubWorkflowRuns(octokit, repo),
     contents: new GitHubContents(octokit, repo),

@@ -5,8 +5,6 @@
 // Tokens and paths come from the environment, never from arguments, so they
 // do not appear in the process list. Exit codes: 0 done, 1 failed, 2 usage.
 import { parseArgs } from "node:util";
-import type { RoleRunner } from "../agents/role-runner.ts";
-import { StubRoleRunner } from "../agents/stub-role.ts";
 import { JsonlRunEventLog } from "../audit/run-events.ts";
 import { CommentRunStateStore } from "../core/run-store/comment-store.ts";
 import { isRole, type Role } from "../hooks/roles.ts";
@@ -31,6 +29,7 @@ import {
 } from "./terminal-target.ts";
 import {
   appId,
+  appLogin,
   artifactEvents,
   claudeRunner,
   env,
@@ -102,16 +101,6 @@ async function decideCommand(given: Args): Promise<void> {
   await setOutputs({ role: result.role ?? "" });
 }
 
-const stub = () => Promise.resolve(new StubRoleRunner());
-
-// The Planner and the Developer run on Claude Code; the Reviewer stays a stub
-// until P7.
-const RUNNERS: Record<Role, () => Promise<RoleRunner>> = {
-  planner: claudeRunner,
-  developer: claudeRunner,
-  reviewer: stub,
-};
-
 // The role job reads the state with its read-only token and writes none.
 async function roleCommand(given: Args): Promise<void> {
   const role = roleOf(given);
@@ -122,9 +111,10 @@ async function roleCommand(given: Args): Promise<void> {
     {
       ...context,
       store,
-      runner: await RUNNERS[role](),
+      runner: await claudeRunner(),
       stopWatch: { intervalMs: STOP_WATCH_MS, wait },
       appId: appId(),
+      appLogin: appLogin(),
       workspace: gitWorkspace(),
       installer: installer(),
       gatesWorkflow: env("SDLC_GATES_WORKFLOW"),
@@ -140,7 +130,12 @@ async function advanceCommand(given: Args): Promise<void> {
   const text = process.env.SDLC_ROLE_OUTPUT ?? "";
   const output =
     text === "" ? undefined : roleJobOutputSchema.parse(JSON.parse(text));
-  const result = await advance(await jobContext(TOKENS), given.issue, output);
+  const context = {
+    ...(await jobContext(TOKENS)),
+    appId: appId(),
+    appLogin: appLogin(),
+  };
+  const result = await advance(context, given.issue, output);
   console.log(`Next role: ${result.role ?? "none"}`);
   await setOutputs({ role: result.role ?? "" });
 }

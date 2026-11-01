@@ -1,11 +1,18 @@
 import { briefOf } from "../brief.ts";
-import { cut, dataSection, type DataPiece } from "../prompt-data.ts";
+import {
+  cut,
+  dataSection,
+  issueAndPlan,
+  type DataPiece,
+} from "../prompt-data.ts";
+import { findingsText } from "../reviewer/prompt.ts";
 import type { RoleInput } from "../role-runner.ts";
 import type { DeveloperBrief } from "./brief.ts";
 
 // Limits that keep the prompt, and so the use of the plan's limits, small.
 const MAX_TEXT = 20_000;
 const MAX_LOG = 12_000;
+const MAX_FINDINGS = 30_000;
 
 function brief(input: RoleInput): DeveloperBrief {
   const found = briefOf(input.brief, "developer");
@@ -33,32 +40,35 @@ function facts(input: RoleInput, given: DeveloperBrief): string[] {
       : [
           "The gates failed on your last push. Their logs follow; fix the cause within the plan.",
         ]),
-    ...(input.findings.length === 0
+    ...(given.review === undefined
       ? []
       : [
-          `The review reported blocking findings: ${input.findings.join(", ")}. Fix them within the plan.`,
+          `The review of commit \`${given.review.sha.slice(0, 7)}\` left blocking findings open; they follow. Fix each within the plan, or, when a finding is wrong, explain why in \`replies\` instead of changing the code.`,
         ]),
   ];
 }
 
 function pieces(input: RoleInput, given: DeveloperBrief): DataPiece[] {
   return [
-    ["issue title", input.issue.title],
-    ["issue body", cut(input.issue.body, MAX_TEXT)],
-    [
-      `plan, version ${String(given.plan.version)}`,
-      cut(given.plan.body, MAX_TEXT),
-    ],
+    ...issueAndPlan(input.issue, given.plan, MAX_TEXT),
     ...given.gateFailures.map((failure): DataPiece => [
       `log of the failed gate job ${failure.job}`,
       cut(failure.log, MAX_LOG),
     ]),
+    ...(given.review === undefined
+      ? []
+      : [
+          [
+            "open review findings",
+            findingsText(given.review.findings, MAX_FINDINGS),
+          ] as const,
+        ]),
   ];
 }
 
 // The prompt of a Developer session: the instructions from prompts/, the
-// facts of the stage, then the issue, the plan and the gate logs as untrusted
-// data (SEC-8.5).
+// facts of the stage, then the issue, the plan, the gate logs and the review
+// findings as untrusted data (SEC-8.5).
 export function developerPrompt(
   input: RoleInput,
   instructions: string,

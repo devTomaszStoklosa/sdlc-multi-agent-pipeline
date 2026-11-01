@@ -18,8 +18,9 @@ import { RunInactiveError } from "./guard.ts";
 import { StageError } from "./stage-error.ts";
 import { remainingMinutes, runLimits } from "./limits.ts";
 import { plannerBrief } from "./planner-brief.ts";
+import { AGENT_REVIEW } from "./agent-review.ts";
+import { reviewerBrief } from "./reviewer-brief.ts";
 import {
-  AGENT_REVIEW,
   performFailure,
   performOutput,
   type EffectScope,
@@ -30,8 +31,10 @@ import { watchForStop, type Wait } from "./stop-watch.ts";
 export interface RoleJobContext extends JobContext {
   runner: RoleRunner;
   stopWatch: { intervalMs: number; wait: Wait };
-  // The pipeline's app, the author of its own comments.
+  // The pipeline's app, the author of its own comments, and its bot, the
+  // author of its reviews.
   appId: number;
+  appLogin: string;
   // The checkout of the connected repository and its install command, for a
   // Developer job.
   workspace: RunWorkspace;
@@ -42,9 +45,8 @@ export interface RoleJobContext extends JobContext {
 
 type Brief = (context: RoleJobContext, record: RunRecord) => Promise<RoleBrief>;
 
-// What the job gathers for a role before its session (SEC-8.10). The
-// Reviewer gets its context in P7.
-const BRIEFS: Partial<Record<Role, Brief>> = {
+// What the job gathers for a role before its session (SEC-8.10).
+const BRIEFS: Record<Role, Brief> = {
   planner: (context, record) =>
     plannerBrief(
       {
@@ -61,12 +63,30 @@ const BRIEFS: Partial<Record<Role, Brief>> = {
     developerBrief(
       {
         comments: context.app.comments,
+        reviews: context.app.reviews,
         contents: context.app.contents,
         runs: context.read.runs,
         workspace: context.workspace,
         installer: context.installer,
         baseline: context.baseline,
         appId: context.appId,
+        appLogin: context.appLogin,
+        gatesWorkflow: context.gatesWorkflow,
+      },
+      record,
+    ),
+  // The Reviewer reads with the job's read-only workflow token; its app token
+  // only comments and completes the check run.
+  reviewer: (context, record) =>
+    reviewerBrief(
+      {
+        reviews: context.read.reviews,
+        comments: context.read.comments,
+        contents: context.read.contents,
+        runs: context.read.runs,
+        workspace: context.workspace,
+        appId: context.appId,
+        appLogin: context.appLogin,
         gatesWorkflow: context.gatesWorkflow,
       },
       record,
@@ -222,7 +242,6 @@ async function watchedSession(
         planVersion: run.progress.planVersion,
         reviewRound: run.progress.reviewRound,
         pushes: run.pushes,
-        findings: run.progress.findings,
         config: run.config.text,
         maxTurns: limits.maxTurnsPerStage,
         brief: scope.brief,
@@ -249,7 +268,7 @@ async function work(
   const issue = await context.read.issues.getIssue(record.issue);
   let brief: RoleBrief | undefined;
   try {
-    brief = await BRIEFS[role]?.(context, record);
+    brief = await BRIEFS[role](context, record);
   } catch (error) {
     if (!(error instanceof StageError)) throw error;
     return {
@@ -266,6 +285,7 @@ async function work(
     guard,
     run,
     issue,
+    appLogin: context.appLogin,
     brief,
     workspace: role === "developer" ? context.workspace : undefined,
     previousPr: record.previousRuns.findLast((earlier) => earlier.pr)?.pr,

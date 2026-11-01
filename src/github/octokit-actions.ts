@@ -67,6 +67,7 @@ export class GitHubWorkflowRuns extends RepoApi implements WorkflowRunsPort {
       id: data.id,
       status: data.status ?? "",
       conclusion: data.conclusion,
+      url: data.html_url,
     };
   }
 
@@ -127,7 +128,12 @@ export class GitHubWorkflowRuns extends RepoApi implements WorkflowRunsPort {
       (candidate) => candidate.name === workflowName,
     );
     if (run === undefined) return undefined;
-    return { id: run.id, status: run.status ?? "", conclusion: run.conclusion };
+    return {
+      id: run.id,
+      status: run.status ?? "",
+      conclusion: run.conclusion,
+      url: run.html_url,
+    };
   }
 }
 

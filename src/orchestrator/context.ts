@@ -8,7 +8,10 @@ import { RunGuard } from "./guard.ts";
 export interface JobContext extends ApplyDeps {
   repository: string;
   app: GitHub;
-  read: Pick<GitHub, "issues" | "pulls" | "runs">;
+  read: Pick<
+    GitHub,
+    "issues" | "pulls" | "runs" | "comments" | "reviews" | "contents"
+  >;
 }
 
 export function guardFor(

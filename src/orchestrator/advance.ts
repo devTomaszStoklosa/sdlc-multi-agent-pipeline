@@ -1,9 +1,15 @@
 import type { Run } from "../core/run-store/run-record.ts";
 import type { RunEvent } from "../core/state-machine/events.ts";
-import { applyChange, performEscalations, type Change } from "./apply.ts";
+import {
+  applyChange,
+  performEscalations,
+  type Applied,
+  type Change,
+} from "./apply.ts";
 import { guardFor, type JobContext } from "./context.ts";
 import type { DecideResult } from "./decide.ts";
 import { RunInactiveError } from "./guard.ts";
+import { requestHumanReview } from "./review-request.ts";
 import type { RoleJobOutput, RoleOutcome } from "./role-output.ts";
 
 type Done = Extract<RoleJobOutput, { status: "done" }>;
@@ -83,10 +89,39 @@ function changeOf(output: RoleJobOutput | undefined): Change | undefined {
   return { event: eventOf(output.outcome), update: updateOf(output) };
 }
 
+// The pipeline's app and its bot, the authors of the plans and reviews that
+// the final review request reads.
+export interface AdvanceContext extends JobContext {
+  appId: number;
+  appLogin: string;
+}
+
+function reviewOf(output: RoleJobOutput | undefined) {
+  if (output?.status !== "done" || output.outcome.kind !== "verdict") {
+    return undefined;
+  }
+  return output.outcome.review;
+}
+
+// The side effects that a transition asks for, after the state is written.
+async function performActions(
+  context: AdvanceContext,
+  applied: Applied,
+  output: RoleJobOutput | undefined,
+): Promise<void> {
+  const guard = guardFor(context, applied.record.issue, applied.record.run.id);
+  await performEscalations(applied, context.app, guard, reviewOf(output));
+  if (!applied.actions.some((action) => action.type === "request-review")) {
+    return;
+  }
+  const { app, appId, appLogin } = context;
+  await requestHumanReview({ ...app, appId, appLogin }, guard, applied.record);
+}
+
 // The job after a role job: it applies the role's output to the run and
 // chooses the next role, without a model and without the Claude token.
 export async function advance(
-  context: JobContext,
+  context: AdvanceContext,
   issue: number,
   output: RoleJobOutput | undefined,
 ): Promise<DecideResult> {
@@ -97,11 +132,7 @@ export async function advance(
     await guardFor(context, issue, run.id).ensure("state write");
     const applied = await applyChange(context, issue, change);
     if (applied === undefined) return {};
-    await performEscalations(
-      applied,
-      context.app,
-      guardFor(context, issue, run.id),
-    );
+    await performActions(context, applied, output);
     return { role: applied.role, runId: run.id };
   } catch (error) {
     if (!(error instanceof RunInactiveError)) throw error;

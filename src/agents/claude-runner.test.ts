@@ -33,7 +33,6 @@ const input: RoleInput = {
   planVersion: 0,
   reviewRound: 0,
   pushes: 0,
-  findings: [],
   attempt: 2,
   config: configText(),
   maxTurns: 30,

@@ -12,6 +12,7 @@ import type { RunWorkspace, WorkspaceChange } from "../git/workspace.ts";
 import { matchesGlob } from "../hooks/paths.ts";
 import { newRunBranch } from "./branch.ts";
 import { commitMessage } from "./developer-commit.ts";
+import { openFindingReplies, postReplies } from "./developer-replies.ts";
 import { runConfig } from "./limits.ts";
 import { outOfScopeIssueBody, pullBody, pullBodyIssues } from "./messages.ts";
 import { clearApproval } from "./planner-effects.ts";
@@ -174,31 +175,46 @@ async function pullRequest(
   return created.number;
 }
 
+// Commits the session's work, or says why there is nothing to push. Replies
+// alone to the review of the pushed commit get an empty commit, whose push
+// runs the gates and the next review round (FR-4.15).
+async function commitWork(
+  scope: DeveloperScope,
+  message: string,
+  replied: boolean,
+): Promise<string | undefined> {
+  const { workspace, brief, run } = scope;
+  const unresolved = await workspace.unresolved(brief.conflicts);
+  if (unresolved.length > 0) {
+    return `Conflict markers remain in: ${unresolved.join(", ")}`;
+  }
+  const answersOnly = replied && brief.review?.sha === run.progress.pushedSha;
+  return (await workspace.commit(message, answersOnly))
+    ? undefined
+    : "The Developer session changed no file.";
+}
+
 // The side effects of a Developer stage (plan 3.2): the job commits the
 // session's changes, checks the branch, publishes a plan update, opens the
-// issues out of scope, pushes and opens the draft pull request, each side
-// effect on GitHub after the check of FR-4.28c.
+// issues out of scope, replies to review findings, pushes and opens the draft
+// pull request, each side effect on GitHub after the check of FR-4.28c.
 export async function developerEffects(
   given: EffectScope,
   work: DeveloperWork,
 ): Promise<RoleOutcome> {
   const scope = developerScope(given);
   const { context, run, issue, workspace } = scope;
-  const unresolved = await workspace.unresolved(scope.brief.conflicts);
-  if (unresolved.length > 0) {
-    return failed(`Conflict markers remain in: ${unresolved.join(", ")}`);
-  }
   const message = commitMessage(work.commit, issue.number);
-  if (!(await workspace.commit(message))) {
-    return failed("The Developer session changed no file.");
-  }
+  const replies = openFindingReplies(scope.brief, work.replies);
+  const problem = await commitWork(scope, message, replies.length > 0);
+  if (problem !== undefined) return failed(problem);
   const main = await context.app.contents.defaultBranch();
   const diff = await workspace.diff(main.name);
-  const problem = diffProblem(
+  const denied = diffProblem(
     diff,
     runConfig(run, context.baseline).hooks.deny_paths,
   );
-  if (problem !== undefined) return failed(problem);
+  if (denied !== undefined) return failed(denied);
   const update =
     work.planUpdate && (await publishUpdate(scope, work.planUpdate, diff));
   // A high-impact update waits for approval before anything is pushed.
@@ -212,6 +228,7 @@ export async function developerEffects(
       { type: work.commit.type, issue: issue.number, title: issue.title },
       (name) => context.app.contents.branchExists(name),
     ));
+  await postReplies(scope, replies);
   const sha = await scope.guard.perform("push", () => workspace.push(branch));
   const pr = await pullRequest(scope, {
     branch,

@@ -4,6 +4,9 @@ export interface PrepareSpec {
   // The run's branch, if it exists on the remote; otherwise the workspace
   // stays on the main branch, where the job's checkout put it.
   branch?: string;
+  // The commit of the branch to check out, when not its head: the commit
+  // under review.
+  at?: string;
   // Merges the main branch into the branch of an earlier run (FR-4.28b).
   merge?: { main: string; message: string };
 }
@@ -14,9 +17,10 @@ export interface WorkspaceChange extends ChangedFile {
   submodule: boolean;
 }
 
-// The workspace of a Developer session as the job sees it. The job keeps its
-// own git directory outside the workspace, so the session cannot change the
-// git configuration or the hooks that the job's git commands use (plan 3.4).
+// The workspace of a Developer session as the job sees it, which a Reviewer
+// job only prepares. The job keeps its own git directory outside the
+// workspace, so the session cannot change the git configuration or the hooks
+// that the job's git commands use (plan 3.4).
 export interface RunWorkspace {
   // Before the session: takes the git directory out of the workspace, checks
   // out the run's branch and merges the main branch into it. Returns the
@@ -26,8 +30,10 @@ export interface RunWorkspace {
   // markers.
   unresolved(paths: readonly string[]): Promise<string[]>;
   // Commits the session's changes, after the merge commit of resolved
-  // conflicts. False when there is nothing new to push.
-  commit(message: string): Promise<boolean>;
+  // conflicts. With `allowEmpty`, a session without changes still gets a
+  // commit, whose push runs the gates and the next review (FR-4.15). False
+  // when there is nothing new to push.
+  commit(message: string, allowEmpty?: boolean): Promise<boolean>;
   // What the branch changes against the main branch, as its pull request
   // shows it.
   diff(main: string): Promise<WorkspaceChange[]>;

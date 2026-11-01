@@ -79,7 +79,7 @@ export class GitWorkspace implements RunWorkspace {
         "-f",
         "-B",
         spec.branch,
-        `origin/${spec.branch}`,
+        spec.at ?? `origin/${spec.branch}`,
       ]);
     }
     this.start = await this.head();
@@ -99,7 +99,7 @@ export class GitWorkspace implements RunWorkspace {
     return marked;
   }
 
-  async commit(message: string): Promise<boolean> {
+  async commit(message: string, allowEmpty = false): Promise<boolean> {
     await this.removePlaceholders();
     if (this.conflicts.length > 0) {
       await this.git(["add", "-A", "--", ...this.conflicts]);
@@ -108,8 +108,10 @@ export class GitWorkspace implements RunWorkspace {
     }
     await this.git(["add", "-A"]);
     const staged = await this.git(["diff", "--cached", "--quiet"], [0, 1]);
-    if (staged.code === 1) {
-      await this.git(["commit", "--no-verify", "-m", message]);
+    const head = await this.head();
+    if (staged.code === 1 || (allowEmpty && head === this.start)) {
+      const empty = staged.code === 1 ? [] : ["--allow-empty"];
+      await this.git(["commit", "--no-verify", ...empty, "-m", message]);
     }
     return (await this.head()) !== this.start;
   }

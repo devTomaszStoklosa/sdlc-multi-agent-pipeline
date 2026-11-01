@@ -134,6 +134,19 @@ describe("GitWorkspace", { timeout: 60_000 }, () => {
     expect(await work.commit("feat: nothing (#12)")).toBe(false);
   });
 
+  it("commits nothing new only when asked to, for replies alone", async () => {
+    clone();
+    const work = workspaceOf();
+    await work.prepare({});
+    expect(await work.commit("chore: answer review findings (#12)", true)).toBe(
+      true,
+    );
+    await work.push("feat/12-a");
+    expect(originLog("feat/12-a", "%s")).toBe(
+      "chore: answer review findings (#12)",
+    );
+  });
+
   it("leaves out the empty files that the sandbox mounts over", async () => {
     await pushFrom("main", "yarn.lock", "");
     clone();
@@ -206,6 +219,21 @@ describe("GitWorkspace", { timeout: 60_000 }, () => {
     expect((await work.diff("main")).map((change) => change.path)).toEqual([
       "src/branch.ts",
     ]);
+  });
+
+  it("checks out the reviewed commit of the branch, not its newer head", async () => {
+    await pushFrom("feat/12-a", "src/branch.ts", "export const c = 1;\n");
+    const reviewed = originLog("feat/12-a", "%H");
+    await pushFrom(
+      "feat/12-a",
+      "src/later.ts",
+      "export const e = 1;\n",
+      "feat/12-a",
+    );
+    clone();
+    await workspaceOf().prepare({ branch: "feat/12-a", at: reviewed });
+    expect(existsSync(path.join(workspace, "src/branch.ts"))).toBe(true);
+    expect(existsSync(path.join(workspace, "src/later.ts"))).toBe(false);
   });
 
   it("leaves the conflicts of the merge to the session and commits the resolution as the merge", async () => {

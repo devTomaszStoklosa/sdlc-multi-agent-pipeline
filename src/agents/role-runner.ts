@@ -3,6 +3,7 @@ import type { Role } from "../hooks/roles.ts";
 import type { RoleBrief } from "./brief.ts";
 import { workSchema } from "./developer/work.ts";
 import { planSchema } from "./planner/plan.ts";
+import { reviewSchema } from "./reviewer/review.ts";
 
 // What a role session gets (plan 3.4). A session also gets the workspace,
 // which the runner knows; the stubs need only these facts.
@@ -13,7 +14,6 @@ export interface RoleInput {
   planVersion: number;
   reviewRound: number;
   pushes: number;
-  findings: readonly string[];
   // 1 for the first attempt of the stage, more for its retries (FR-4.30).
   attempt: number;
   // The run's .sdlc-agents.yml copy (FR-10.5) and the turn limit of a stage.
@@ -43,16 +43,10 @@ const developerOutput = z.strictObject({
   work: workSchema,
 });
 
+// The job derives the identifiers of the findings and the verdict.
 const reviewerOutput = z.strictObject({
   role: z.literal("reviewer"),
-  verdict: z.enum(["approve", "changes_requested"]),
-  findings: z.array(
-    z.strictObject({
-      id: z.string().min(1),
-      blocking: z.boolean(),
-      summary: z.string(),
-    }),
-  ),
+  review: reviewSchema,
 });
 
 export const ROLE_FAILURES = ["infra", "usage-limit", "max-turns"] as const;

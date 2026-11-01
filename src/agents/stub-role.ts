@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { briefOf } from "./brief.ts";
 import type {
   RoleInput,
   RoleOutput,
@@ -89,16 +90,39 @@ function developer(scenario: Scenario, input: RoleInput): RoleOutput {
   };
 }
 
+// Rules of the stub's findings, one per round, so a finding of a later round
+// gets another identifier unless the scenario repeats it.
+const STUB_RULES = ["scope", "plan", "tests", "kiss"] as const;
+
+// The stub Reviewer leaves the identifiers and the verdict to the job, as the
+// real one does: a blocking finding requests changes, and an earlier finding
+// stays open only when the scenario repeats it (FR-4.18).
 function reviewer(scenario: Scenario, input: RoleInput): RoleOutput {
   const verdict = pick(scenario.verdicts, input.reviewRound - 1) ?? "approve";
-  const id = scenario.repeat_finding
-    ? "stub-finding"
-    : `stub-finding-${String(input.reviewRound)}`;
+  const rule = scenario.repeat_finding
+    ? "scope"
+    : (pick(STUB_RULES, input.reviewRound - 1) ?? "scope");
   const findings =
     verdict === "approve"
       ? []
-      : [{ id, blocking: true, summary: "Znalezisko blokujące zaślepki." }];
-  return { role: "reviewer", verdict, findings };
+      : [
+          {
+            path: `stub-runs/issue-${String(input.issue.number)}.json`,
+            line: 1,
+            rule,
+            blocking: true,
+            description: "Znalezisko blokujące zaślepki.",
+            suggestion: "Popraw zgodnie ze scenariuszem zaślepki.",
+          },
+        ];
+  const earlier = (briefOf(input.brief, "reviewer")?.earlier ?? []).map(
+    ({ finding }) => ({
+      id: finding.id,
+      resolved: !scenario.repeat_finding,
+      note: "Scenariusz zaślepki.",
+    }),
+  );
+  return { role: "reviewer", review: { findings, earlier } };
 }
 
 const OUTPUTS = { planner, developer, reviewer };

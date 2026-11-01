@@ -23,10 +23,12 @@ export const ROLE_SCOPES: Readonly<Record<Role, Scope>> = {
   reviewer: { contents: "read", "pull-requests": "write", checks: "write" },
 };
 
+// The orchestrator writes pull requests only to ask for the final review
+// (FR-4.20).
 export const ORCHESTRATOR_SCOPE: Scope = {
   contents: "read",
   issues: "write",
-  "pull-requests": "read",
+  "pull-requests": "write",
 };
 
 // The scope of the stop and pull-request-closed workflows (FR-4.28a, FR-4.35).

@@ -1,8 +1,9 @@
 import type { DeveloperBrief } from "./developer/brief.ts";
 import type { PlannerBrief } from "./planner/brief.ts";
+import type { ReviewerBrief } from "./reviewer/brief.ts";
 
 // What the job gathers for a role session besides the issue (SEC-8.10).
-export type RoleBrief = PlannerBrief | DeveloperBrief;
+export type RoleBrief = PlannerBrief | DeveloperBrief | ReviewerBrief;
 
 export function briefOf<K extends RoleBrief["kind"]>(
   brief: RoleBrief | undefined,

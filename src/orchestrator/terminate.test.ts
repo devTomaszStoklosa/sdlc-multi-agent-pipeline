@@ -5,7 +5,7 @@ import {
   roleOf,
   type ActiveState,
 } from "../core/state-machine/states.ts";
-import { AGENT_REVIEW } from "./role-effects.ts";
+import { AGENT_REVIEW } from "./agent-review.ts";
 import { runRoleJob } from "./role-job.ts";
 import { cancelActiveRun, finalize } from "./terminate.ts";
 import type { TerminalTarget } from "./terminal-target.ts";
