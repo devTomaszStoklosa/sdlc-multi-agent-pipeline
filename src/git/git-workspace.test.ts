@@ -208,6 +208,21 @@ describe("GitWorkspace", { timeout: 60_000 }, () => {
     ]);
   });
 
+  it("checks out the reviewed commit of the branch, not its newer head", async () => {
+    await pushFrom("feat/12-a", "src/branch.ts", "export const c = 1;\n");
+    const reviewed = originLog("feat/12-a", "%H");
+    await pushFrom(
+      "feat/12-a",
+      "src/later.ts",
+      "export const e = 1;\n",
+      "feat/12-a",
+    );
+    clone();
+    await workspaceOf().prepare({ branch: "feat/12-a", at: reviewed });
+    expect(existsSync(path.join(workspace, "src/branch.ts"))).toBe(true);
+    expect(existsSync(path.join(workspace, "src/later.ts"))).toBe(false);
+  });
+
   it("leaves the conflicts of the merge to the session and commits the resolution as the merge", async () => {
     await pushFrom("feat/12-a", "src/price.ts", "export const a = 2;\n");
     await pushFrom("main", "src/price.ts", "export const a = 3;\n");

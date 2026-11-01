@@ -7,6 +7,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { ClaudeRoleRunner, spawnProcess } from "../agents/claude-runner.ts";
 import { developerSession } from "../agents/developer/session.ts";
 import { plannerSession } from "../agents/planner/session.ts";
+import { reviewerSession } from "../agents/reviewer/session.ts";
 import type { RoleRunner } from "../agents/role-runner.ts";
 import { loadRoleSettings } from "../agents/roles-config.ts";
 import {
@@ -61,6 +62,12 @@ export function appId(): number {
   return Number(env("SDLC_APP_ID"));
 }
 
+// The bot user of the app, the author of its commits and reviews, from the
+// slug that the token step gives.
+export function appLogin(): string {
+  return `${env("SDLC_APP_SLUG")}[bot]`;
+}
+
 // The ports of the token in an environment variable.
 export function github(tokenVariable: string): GitHub {
   return createGitHub({
@@ -109,18 +116,22 @@ export async function claudeRunner(): Promise<RoleRunner> {
     protect: [env("RUNNER_TEMP")],
     baseline: await loadBaseline(),
     token: env("CLAUDE_CODE_OAUTH_TOKEN"),
-    sessions: { planner: plannerSession, developer: developerSession },
+    sessions: {
+      planner: plannerSession,
+      developer: developerSession,
+      reviewer: reviewerSession,
+    },
     settings: loadRoleSettings,
     runProcess: spawnProcess,
     parentEnv: process.env,
   });
 }
 
-// The workspace of a Developer job. The job's git directory sits in the
-// runner's temporary directory, which sessions may not write (plan 3.4).
-// Commits name the app's bot user, from the slug that the token step gives.
+// The workspace of a Developer or Reviewer job. The job's git directory sits
+// in the runner's temporary directory, which sessions may not write (plan
+// 3.4). Commits name the app's bot user.
 export function gitWorkspace(): RunWorkspace {
-  const bot = `${env("SDLC_APP_SLUG")}[bot]`;
+  const bot = appLogin();
   return new GitWorkspace({
     workspace: env("SDLC_WORKSPACE"),
     gitDir: path.join(env("RUNNER_TEMP"), "sdlc-git"),

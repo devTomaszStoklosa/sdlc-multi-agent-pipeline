@@ -2,13 +2,13 @@ import type { RoleBrief } from "../agents/brief.ts";
 import type { RoleOutput, RoleResult } from "../agents/role-runner.ts";
 import type { Run } from "../core/run-store/run-record.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
+import { completeAgentReview } from "./agent-review.ts";
 import type { JobContext } from "./context.ts";
 import { developerEffects } from "./developer-effects.ts";
 import type { RunGuard } from "./guard.ts";
 import { plannerEffects } from "./planner-effects.ts";
+import { reviewerEffects } from "./reviewer-effects.ts";
 import type { RoleOutcome } from "./role-output.ts";
-
-export const AGENT_REVIEW = "agent-review";
 
 export interface EffectScope {
   context: JobContext;
@@ -25,29 +25,6 @@ export interface EffectScope {
   previousPr?: number;
 }
 
-async function completeReview(
-  scope: EffectScope,
-  verdict: "approve" | "changes_requested" | "failed",
-): Promise<void> {
-  if (scope.checkRunId === undefined) return;
-  const conclusion = {
-    approve: "success",
-    changes_requested: "failure",
-    failed: "cancelled",
-  } as const;
-  const id = scope.checkRunId;
-  await scope.guard.perform("agent-review result", () =>
-    scope.context.app.checks.completeCheckRun(id, conclusion[verdict], {
-      title: {
-        approve: "approve",
-        changes_requested: "changes_requested",
-        failed: "Review przerwany",
-      }[verdict],
-      summary: `Werdykt zaślepki Reviewera w przebiegu ${scope.run.id}.`,
-    }),
-  );
-}
-
 // The side effects of a session's validated result, each after the check of
 // FR-4.28c (plan 3.2).
 export async function performOutput(
@@ -59,13 +36,8 @@ export async function performOutput(
       return plannerEffects(scope, output.plan);
     case "developer":
       return developerEffects(scope, output.work);
-    case "reviewer": {
-      await completeReview(scope, output.verdict);
-      const blockingFindings = output.findings
-        .filter((finding) => finding.blocking)
-        .map((finding) => finding.id);
-      return { kind: "verdict", verdict: output.verdict, blockingFindings };
-    }
+    case "reviewer":
+      return reviewerEffects(scope, output.review);
   }
 }
 
@@ -75,7 +47,10 @@ export async function performFailure(
     | Extract<RoleResult, { status: "failed" }>
     | { failure: "time"; message: string; resetsAt?: undefined },
 ): Promise<RoleOutcome> {
-  await completeReview(scope, "failed");
+  await completeAgentReview(scope, "cancelled", {
+    title: "Review przerwany",
+    summary: `Etap Reviewera w przebiegu ${scope.run.id} nie dał werdyktu: ${result.failure}.`,
+  });
   return {
     kind: "failed",
     failure: result.failure,

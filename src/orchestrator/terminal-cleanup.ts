@@ -1,7 +1,7 @@
 import { workingMinutes } from "../core/state-machine/working-time.ts";
 import { isWorking } from "../core/state-machine/states.ts";
 import { costUsd, runLimits, type RunLimits } from "./limits.ts";
-import { AGENT_REVIEW } from "./role-effects.ts";
+import { AGENT_REVIEW } from "./agent-review.ts";
 import { stopSummary, type EndedSession } from "./stop-summary.ts";
 import {
   logTerminal,

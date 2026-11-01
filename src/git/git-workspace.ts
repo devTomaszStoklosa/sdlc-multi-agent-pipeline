@@ -79,7 +79,7 @@ export class GitWorkspace implements RunWorkspace {
         "-f",
         "-B",
         spec.branch,
-        `origin/${spec.branch}`,
+        spec.at ?? `origin/${spec.branch}`,
       ]);
     }
     this.start = await this.head();

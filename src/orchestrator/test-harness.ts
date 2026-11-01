@@ -90,6 +90,7 @@ export class Harness {
       gatesWorkflow: "Gates",
       runner: this.runner,
       appId: this.github.appId,
+      appLogin: this.github.reviews.login,
       workspace: this.workspace,
       installer: {
         run: (command: string) => {

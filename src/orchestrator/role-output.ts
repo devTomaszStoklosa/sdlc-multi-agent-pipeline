@@ -28,6 +28,14 @@ const outcomeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("verdict"),
     verdict: z.enum(["approve", "changes_requested"]),
     blockingFindings: z.array(z.string()),
+    // The review and its open blocking findings, which an escalation lists
+    // (FR-4.18).
+    review: z.strictObject({
+      url: z.string(),
+      open: z.array(
+        z.strictObject({ id: z.string(), rule: z.string(), place: z.string() }),
+      ),
+    }),
   }),
   z.strictObject({
     kind: z.literal("failed"),
