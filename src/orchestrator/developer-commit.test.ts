@@ -36,6 +36,43 @@ describe("commitMessage", () => {
     );
     expect(message).not.toContain(token);
   });
+
+  it("breaks the body into lines within 100 characters (#56)", () => {
+    // The body of the commit that commitlint rejected in P8.
+    const body =
+      "The subtotal now checks every item amount and the running sum with Number.isSafeInteger, so the cart no longer reports an imprecise amount. total inherits the check.";
+    const message = commitMessage({ type: "fix", subject: "s", body }, 43);
+    expect(message).toBe(
+      "fix: s (#43)\n\nThe subtotal now checks every item amount and the running sum with Number.isSafeInteger, so the cart\nno longer reports an imprecise amount. total inherits the check.",
+    );
+  });
+
+  it("keeps short lines and paragraphs, and cuts a word longer than a line", () => {
+    const url = `https://example.com/${"a".repeat(130)}`;
+    const body = `Short line.\n\nSee ${url} for details.`;
+    const lines = commitMessage({ type: "docs", subject: "s", body }, 1).split(
+      "\n",
+    );
+    expect(lines.slice(2)).toEqual([
+      "Short line.",
+      "",
+      "See",
+      url.slice(0, 100),
+      `${url.slice(100)} for details.`,
+    ]);
+  });
+
+  it("wraps the body after redaction", () => {
+    const token = `sk-ant-oat01-${"x".repeat(120)}`;
+    const message = commitMessage(
+      { type: "chore", subject: "s", body: `token ${token}` },
+      1,
+    );
+    expect(message).not.toContain("x".repeat(20));
+    for (const line of message.split("\n")) {
+      expect(line.length).toBeLessThanOrEqual(100);
+    }
+  });
 });
 
 describe("mergeMessage", () => {
