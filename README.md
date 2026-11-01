@@ -81,14 +81,14 @@ Stan przebiegu jest w ukrytym komentarzu GitHub App w issue ([src/core/run-store
 
 Ręczne uruchomienie workflow Orchestrate z numerem issue startuje przebieg czekający w kolejce, gdy nie ma innego aktywnego przebiegu, odbiera wynik bramek, który nie dotarł, a etap, którego job zakończył się bez wyniku, kieruje do `needs-human`.
 
-Reviewer jest do P7 zaślepką ([src/agents/stub-role.ts](src/agents/stub-role.ts)) i nie zużywa limitu planu Pro. Jego zachowanie, a w testach także zachowanie Plannera i Developera, ustala ukryty blok w treści issue, np.:
+W testach role zastępują zaślepki ([src/agents/stub-role.ts](src/agents/stub-role.ts)), które nie zużywają limitu planu Pro. Ich zachowanie ustala ukryty blok w treści issue, np.:
 
 ```text
 <!-- sdlc-stub
 plans: [high-impact, normal]      # rodzaj planu w kolejnych wersjach
 plan_update: high-impact          # pierwszy etap Developera aktualizuje plan
 verdicts: [changes_requested, approve]
-repeat_finding: true              # każde changes_requested zgłasza to samo znalezisko
+repeat_finding: true              # znalezisko zostaje otwarte w kolejnej rundzie
 failures:
   planner: [infra, usage-limit]   # nieudane próby etapu: infra, usage-limit, max-turns
 delay_seconds:
@@ -97,7 +97,7 @@ cost_usd: 0.01                    # szacunek kosztu każdej sesji
 -->
 ```
 
-Bez bloku Reviewer zwraca `approve`. Ostatni element listy obowiązuje dla kolejnych wystąpień. Pola `plans` i `plan_update` oraz wpisy `planner` i `developer` w `failures` i `delay_seconds` działają tylko w testach, bo w repozytorium demo Planner i Developer pracują na Claude Code.
+Bez bloku zaślepka Reviewera zwraca review bez znalezisk, czyli `approve`. Ostatni element listy obowiązuje dla kolejnych wystąpień. W repozytorium demo wszystkie role pracują na Claude Code, więc blok działa tylko w testach.
 
 ## Planner
 
@@ -111,7 +111,7 @@ Po sesji kod joba waliduje plan, klasyfikuje go i publikuje jako nowy komentarz 
 
 Developer działa w jobie roli jako sesja `claude -p` z modelem i promptem z [prompts/roles.yml](prompts/roles.yml), narzędziami do odczytu, edycji i poleceń powłoki w sandboxie oraz hookami z [src/hooks](src/hooks). Sandbox nie pozwala poleceniom zapisywać w kodzie pipeline'u, w katalogu sesji ani w `$RUNNER_TEMP`, które leżą obok przestrzeni roboczej w katalogu domowym runnera. Sesja nie commituje i nie pushuje: zostawia zmiany w przestrzeni roboczej i zwraca według schematu z [src/agents/developer/work.ts](src/agents/developer/work.ts) typ i temat commita, podsumowanie, issue spoza zakresu i opcjonalną aktualizację planu.
 
-Przed sesją kod joba przenosi `.git` checkoutu do własnego katalogu w `$RUNNER_TEMP` ([src/git](src/git)), a sesji zostawia kopię. Polecenia git joba działają na tym katalogu bez konfiguracji systemowej, globalnej i hooków, więc nic, co zapisała sesja, nie uruchamia się w jobie z tokenami. Job przełącza przestrzeń roboczą na branch przebiegu, a w pierwszym etapie przebiegu, który kontynuuje otwarty PR, scala do niego `main` i zostawia konflikty sesji (FR-4.28b). Potem instaluje zależności poleceniem `commands.install` w bubblewrap z siecią, ale bez tokenów joba i bez widoku innych procesów, bo sandbox sesji montuje `node_modules/.bin` tylko do odczytu. Po zapisie manifestu zależności z planu hook `PostToolUse` instaluje zależności ponownie poleceniem `commands.update_lockfile` i aktualizuje lockfile (#49); bez tego polecenia w `.sdlc-agents.yml` sesja nie zmieni zależności. Sesja dostaje bieżącą wersję planu i końcówki logów niezaliczonych jobów bramek ostatniego pushu (FR-4.12).
+Przed sesją kod joba przenosi `.git` checkoutu do własnego katalogu w `$RUNNER_TEMP` ([src/git](src/git)), a sesji zostawia kopię. Polecenia git joba działają na tym katalogu bez konfiguracji systemowej, globalnej i hooków, więc nic, co zapisała sesja, nie uruchamia się w jobie z tokenami. Job przełącza przestrzeń roboczą na branch przebiegu, a w pierwszym etapie przebiegu, który kontynuuje otwarty PR, scala do niego `main` i zostawia konflikty sesji (FR-4.28b). Potem instaluje zależności poleceniem `commands.install` w bubblewrap z siecią, ale bez tokenów joba i bez widoku innych procesów, bo sandbox sesji montuje `node_modules/.bin` tylko do odczytu. Po zapisie manifestu zależności z planu hook `PostToolUse` instaluje zależności ponownie poleceniem `commands.update_lockfile` i aktualizuje lockfile (#49); bez tego polecenia w `.sdlc-agents.yml` sesja nie zmieni zależności. Sesja dostaje bieżącą wersję planu, końcówki logów niezaliczonych jobów bramek ostatniego pushu (FR-4.12) i otwarte znaleziska ostatniego review z prośbą o zmiany (FR-4.15). Znalezisko, które uważa za błędne, sesja zostawia bez zmiany kodu i wyjaśnia w `replies`.
 
 Po sesji kod joba ([src/orchestrator/developer-effects.ts](src/orchestrator/developer-effects.ts)):
 
@@ -119,7 +119,21 @@ Po sesji kod joba ([src/orchestrator/developer-effects.ts](src/orchestrator/deve
 2. odrzuca branch z niepoprawionymi konfliktami, zagnieżdżonymi repozytoriami, ścieżkami z `hooks.deny_paths` albo ponad 200 zmienionymi plikami;
 3. publikuje aktualizację planu jako nową wersję z powodem i pełną listą plików (FR-4.11). Wersja high-impact zdejmuje `plan:approved` i czeka na akceptację bez pushu;
 4. zakłada issue spoza zakresu (FR-4.10);
-5. pushuje tokenem App na branch `<typ>/<numer-issue>-<opis z tytułu issue>` (FR-4.7) i otwiera draft PR z `Closes #<numer>`, linkiem do planu, issue spoza zakresu i poprzednim PR (FR-4.8).
+5. publikuje odpowiedzi na znaleziska w ich wątkach ([src/orchestrator/developer-replies.ts](src/orchestrator/developer-replies.ts)). Gdy sesja tylko odpowiedziała na review bieżącego commita i nic nie zmieniła, commit jest pusty: jego push uruchamia bramki i kolejną rundę review, bo bez zdarzenia GitHuba run workflow nie uruchomi trzeciej roli (FR-4.15);
+6. pushuje tokenem App na branch `<typ>/<numer-issue>-<opis z tytułu issue>` (FR-4.7) i otwiera draft PR z `Closes #<numer>`, linkiem do planu, issue spoza zakresu i poprzednim PR (FR-4.8).
+
+## Reviewer
+
+Reviewer działa w jobie roli jako sesja `claude -p` z modelem i promptem z [prompts/roles.yml](prompts/roles.yml), innym modelem niż Developer (FR-5.5, test w [src/agents/roles-config.test.ts](src/agents/roles-config.test.ts)), i tylko z narzędziami do odczytu (FR-5.4). Przestrzeń robocza jest na recenzowanym commicie, czyli ostatnim pushu przebiegu. Kod joba zbiera dla sesji tokenem workflow tylko do odczytu issue, plan, cały diff PR względem `main`, wyniki jobów bramek i otwarte znaleziska poprzedniej rundy z odpowiedziami Developera ([src/orchestrator/reviewer-brief.ts](src/orchestrator/reviewer-brief.ts)). Opisu PR, komunikatów commitów ani niczego z sesji Developera sesja nie dostaje (FR-5.3).
+
+Sesja zwraca według schematu z [src/agents/reviewer/review.ts](src/agents/reviewer/review.ts) znaleziska (plik, linia, reguła, waga, opis, sugestia) i ocenę każdego wcześniejszego znaleziska. Po sesji kod joba ([src/orchestrator/reviewer-effects.ts](src/orchestrator/reviewer-effects.ts)):
+
+1. liczy identyfikator znaleziska `F-<12 znaków sha256>` z reguły, pliku i treści linii ze znormalizowanymi białymi znakami ([src/agents/reviewer/finding-id.ts](src/agents/reviewer/finding-id.ts)), więc to samo znalezisko ma ten sam identyfikator w każdej rundzie (FR-4.14, FR-4.18);
+2. ustala werdykt: otwarte znalezisko blokujące, także nierozwiązane albo nieocenione z poprzedniej rundy, daje `changes_requested`, a brak takich znalezisk `approve` (FR-4.17);
+3. publikuje jedno review PR, które tylko komentuje, bo port review nie ma approvalu (FR-5.2, FR-6.2). Każde znalezisko ma komentarz na swojej linii, gdy diff ją pokazuje, a w przeciwnym razie na swoim pliku. Treść review ma ukryty blok `sdlc-review` z danymi rundy, które czytają Developer, kolejna runda i opis PR;
+4. kończy check run `agent-review` wynikiem `success` albo `failure` z linkiem do review.
+
+Powtórzone otwarte znalezisko albo limit rund kończą przebieg w `needs-human`, a komentarz eskalacyjny wymienia otwarte znaleziska blokujące (FR-4.18). Po `approve` job `advance` dopisuje do opisu PR plan, wyniki bramek, rundy review z rozwiązanymi znaleziskami i otwarte znaleziska nieblokujące, kończy szkic PR i prosi o review osoby przypisane do issue. Bez przypisanych o review code ownerów prosi GitHub przy wyjściu PR ze szkicu (FR-4.20, FR-6.4).
 
 ## Bramka zakresu
 
