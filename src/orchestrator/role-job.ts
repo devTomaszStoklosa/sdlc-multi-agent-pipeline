@@ -146,14 +146,15 @@ interface SessionLimits {
 }
 
 // One stage: the session and its retries after infrastructure errors, within
-// the run's remaining time (FR-4.30, NFR-11.5), until a stop.
+// the run's remaining time (FR-4.30, NFR-11.5), until a stop. The timeout
+// takes whole milliseconds, rounded down so the session stays within the limit.
 async function session(
   context: RoleJobContext,
   input: Omit<RoleInput, "attempt">,
   limits: SessionLimits,
 ): Promise<Session> {
   const signal = AbortSignal.any([
-    AbortSignal.timeout(Math.max(1, limits.minutes * 60_000)),
+    AbortSignal.timeout(Math.max(1, Math.floor(limits.minutes * 60_000))),
     limits.stop,
   ]);
   let usage = NO_USAGE;
