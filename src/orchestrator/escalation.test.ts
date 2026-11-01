@@ -102,6 +102,16 @@ describe("retries and escalation", () => {
     expect(await repo.state(1)).toBe("needs-human");
     expect(repo.comments(1).at(-1)).toMatch(/limit czasu/);
   });
+
+  it("starts a stage when the remaining time is not whole milliseconds", async () => {
+    const repo = new Harness();
+    await repo.label(1, "agent:ready");
+    // The working time of the run in P8 (#54): 45 minutes minus it, times
+    // 60 000, is 2141437.0000000005, which AbortSignal.timeout rejects.
+    repo.tick(558_563 / 60_000);
+    expect(await repo.gates(1, "success")).toEqual(["reviewer"]);
+    expect(await repo.state(1)).toBe("awaiting-human-review");
+  });
 });
 
 describe("the configuration copy (FR-10.5)", () => {
