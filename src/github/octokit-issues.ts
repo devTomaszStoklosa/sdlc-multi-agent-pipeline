@@ -148,6 +148,7 @@ export class GitHubIssues extends RepoApi implements IssuesPort {
       body: data.body ?? "",
       state: data.state === "open" ? "open" : "closed",
       labels: labelNames(data.labels),
+      assignees: (data.assignees ?? []).map((user) => user.login),
     };
   }
 
@@ -268,6 +269,32 @@ export class GitHubPulls extends RepoApi implements PullRequestsPort {
       ...this.repo,
       pull_number: pull,
       body,
+    });
+  }
+
+  // The REST API cannot end a draft, so this takes GraphQL.
+  async markReadyForReview(pull: number): Promise<void> {
+    const { data } = await this.octokit.rest.pulls.get({
+      ...this.repo,
+      pull_number: pull,
+    });
+    if (!data.draft) return;
+    await this.octokit.graphql(
+      `mutation($id: ID!) {
+        markPullRequestReadyForReview(input: { pullRequestId: $id }) {
+          clientMutationId
+        }
+      }`,
+      { id: data.node_id },
+    );
+  }
+
+  async requestReviewers(pull: number, logins: readonly string[]) {
+    if (logins.length === 0) return;
+    await this.octokit.rest.pulls.requestReviewers({
+      ...this.repo,
+      pull_number: pull,
+      reviewers: [...logins],
     });
   }
 }

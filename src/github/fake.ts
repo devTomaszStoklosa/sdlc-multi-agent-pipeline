@@ -1,4 +1,5 @@
 import type { GitHub } from "./client.ts";
+import { FakePullReviews } from "./fake-reviews.ts";
 import { FakeWorkflowRuns } from "./fake-runs.ts";
 import type {
   ChangedFile,
@@ -55,6 +56,10 @@ export class FakeGitHub
   readonly diffs = new Map<string, ChangedFile[]>();
   readonly drafts: NewPullRequest[] = [];
   readonly writes: string[] = [];
+  readonly reviews = new FakePullReviews(this.writes);
+  // Pull requests out of draft, and the reviewers requested on each.
+  readonly ready = new Set<number>();
+  readonly reviewRequests = new Map<number, string[]>();
   // Whether a write by the app counts as a comment of the app.
   commentAppId: number | undefined = this.appId;
   private nextId = 1000;
@@ -72,6 +77,7 @@ export class FakeGitHub
       comments: this,
       issues: this,
       pulls: this,
+      reviews: this.reviews,
       checks: this,
       runs: this,
       contents: this,
@@ -85,6 +91,7 @@ export class FakeGitHub
       body: "",
       state: "open",
       labels: [],
+      assignees: [],
       ...fields,
     };
     this.issues.set(number, issue);
@@ -237,6 +244,18 @@ export class FakeGitHub
     const found = this.pulls.get(pull);
     if (found === undefined) throw new Error(`No pull request ${String(pull)}`);
     found.body = body;
+    return Promise.resolve();
+  }
+
+  markReadyForReview(pull: number): Promise<void> {
+    this.writes.push(`ready #${String(pull)}`);
+    this.ready.add(pull);
+    return Promise.resolve();
+  }
+
+  requestReviewers(pull: number, logins: readonly string[]): Promise<void> {
+    this.writes.push(`reviewers #${String(pull)} ${logins.join(",")}`);
+    this.reviewRequests.set(pull, [...logins]);
     return Promise.resolve();
   }
 
