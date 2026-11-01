@@ -44,9 +44,35 @@ function reasonText(reason: EscalationReason): string {
   }
 }
 
-export function escalation(run: Run, reason: EscalationReason): string {
+// The review behind an escalation and its open blocking findings (FR-4.18).
+export interface EscalatedReview {
+  url: string;
+  open: readonly { id: string; rule: string; place: string }[];
+}
+
+function openFindings(review: EscalatedReview | undefined): string[] {
+  if (review === undefined || review.open.length === 0) return [];
+  return [
+    "",
+    `Otwarte znaleziska blokujące ([review](${review.url})):`,
+    "",
+    ...review.open.map(
+      (finding) =>
+        `- \`${finding.id}\` (\`${finding.rule}\`, \`${finding.place}\`)`,
+    ),
+  ];
+}
+
+export function escalation(
+  run: Run,
+  reason: EscalationReason,
+  review?: EscalatedReview,
+): string {
   const resume = run.progress.resumeState ?? "?";
-  return `Przebieg ${run.id} wymaga decyzji człowieka: ${reasonText(reason)}. Zdejmij etykietę \`${run.labels.needs_human}\`, żeby wznowić przebieg od stanu \`${resume}\` (FR-4.32), albo dodaj \`${STOP_LABEL}\`, żeby go zatrzymać.`;
+  return [
+    `Przebieg ${run.id} wymaga decyzji człowieka: ${reasonText(reason)}. Zdejmij etykietę \`${run.labels.needs_human}\`, żeby wznowić przebieg od stanu \`${resume}\` (FR-4.32), albo dodaj \`${STOP_LABEL}\`, żeby go zatrzymać.`,
+    ...openFindings(review),
+  ].join("\n");
 }
 
 // The body of an issue out of scope, with the Developer's description made

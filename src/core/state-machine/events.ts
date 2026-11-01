@@ -54,7 +54,10 @@ export type EscalationReason =
 // after the check of FR-4.28c.
 export type RunAction =
   | { type: "start-role"; role: "planner" | "developer" | "reviewer" }
-  | { type: "escalate"; reason: EscalationReason };
+  | { type: "escalate"; reason: EscalationReason }
+  // The pull request is ready, and a human is asked for the final review
+  // (FR-4.20, FR-6.4).
+  | { type: "request-review" };
 
 export interface TransitionLimits {
   maxReviewRounds: number;

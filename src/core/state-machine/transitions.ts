@@ -210,7 +210,10 @@ export const TRANSITIONS: readonly TransitionRule[] = [
     from: ["reviewing"],
     event: "verdict",
     when: (_progress, event) => event.verdict === "approve",
-    apply: (progress) => enter(progress, "awaiting-human-review"),
+    apply: (progress) => ({
+      ...enter(progress, "awaiting-human-review"),
+      actions: [{ type: "request-review" }],
+    }),
   }),
   rule({
     name: "review-repeated-finding",

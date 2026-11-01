@@ -147,6 +147,59 @@ describe("the review loop", () => {
     await repo.gates(1, "success");
     await repo.gates(1, "success");
     expect(await repo.state(1)).toBe("needs-human");
+    const comment = repo.comments(1).at(-1) ?? "";
+    expect(comment).toContain("Otwarte znaleziska blokujące ([review](");
+    expect(comment).toMatch(
+      /- `F-[0-9a-f]{12}` \(`kiss`, `src\/price\.ts:2`\)/,
+    );
+  });
+
+  it("asks for the final review after approve, as its last step (FR-4.20, FR-6.4)", async () => {
+    const minor = {
+      path: "src/price.ts",
+      line: 1,
+      rule: "dry" as const,
+      blocking: false,
+      nonBlockingReason: "Kosmetyka.",
+      description: "Powtórzona stała.",
+      suggestion: "Wydziel stałą.",
+    };
+    const loop = new ScriptedLoop(
+      [() => aWork()],
+      [
+        () => FINDING,
+        (input) => ({
+          findings: [minor],
+          earlier: (input.brief?.kind === "reviewer"
+            ? input.brief.earlier
+            : []
+          ).map(({ finding }) => ({
+            id: finding.id,
+            resolved: true,
+            note: "Poprawione.",
+          })),
+        }),
+      ],
+    );
+    const { repo } = await firstReview(loop);
+    const issue = repo.github.issues.get(1);
+    if (issue) issue.assignees = ["alice", "helper[bot]"];
+    await repo.gates(1, "success");
+    await repo.pushedFile(1, "src/price.ts", FILE, PATCH);
+    await repo.gates(1, "success");
+    expect(await repo.state(1)).toBe("awaiting-human-review");
+    const { pr } = await repo.run(1);
+    const body = repo.github.pulls.get(pr ?? 0)?.body ?? "";
+    expect(body).toMatch(/^Closes #1/);
+    expect(body).toContain("## Przed finalną akceptacją");
+    expect(body).toContain("- **Plan:** [wersja 1](");
+    expect(body).toMatch(/- \*\*Runda 1\*\* .*`changes_requested`; blokujące/);
+    expect(body).toMatch(/- \*\*Runda 2\*\* .*`approve`; rozwiązane: `F-/);
+    expect(body).toContain("Powtórzona stała.");
+    expect(body).toContain("brak w MVP");
+    expect(repo.github.ready).toEqual(new Set([pr]));
+    expect(repo.github.reviewRequests.get(pr ?? 0)).toEqual(["alice"]);
+    expect(repo.github.writes.at(-1)).toBe(`reviewers #${String(pr)} alice`);
   });
 
   it("does not answer a review of an earlier commit with an empty commit", async () => {

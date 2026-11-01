@@ -13,7 +13,7 @@ import type { CommentsPort, IssuesPort } from "../github/ports.ts";
 import type { Role } from "../hooks/roles.ts";
 import type { RunGuard } from "./guard.ts";
 import { reachedLimit, runLimits } from "./limits.ts";
-import { escalation } from "./messages.ts";
+import { escalation, type EscalatedReview } from "./messages.ts";
 
 const WRITE_ATTEMPTS = 3;
 
@@ -147,11 +147,13 @@ export interface EscalationPorts {
 }
 
 // The escalation of a transition: the needs-human label and a comment that
-// says why and how to resume (FR-4.18, FR-4.30, FR-4.31).
+// says why and how to resume, with the open findings of an escalated review
+// (FR-4.18, FR-4.30, FR-4.31).
 export async function performEscalations(
   applied: Applied,
   ports: EscalationPorts,
   guard: RunGuard,
+  review?: EscalatedReview,
 ): Promise<void> {
   const { run, issue } = applied.record;
   for (const action of applied.actions) {
@@ -160,7 +162,10 @@ export async function performEscalations(
       ports.issues.addLabels(issue, [run.labels.needs_human]),
     );
     await guard.perform("escalation comment", () =>
-      ports.comments.createComment(issue, escalation(run, action.reason)),
+      ports.comments.createComment(
+        issue,
+        escalation(run, action.reason, review),
+      ),
     );
   }
 }

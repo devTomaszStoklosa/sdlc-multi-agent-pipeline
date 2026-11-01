@@ -130,7 +130,12 @@ async function advanceCommand(given: Args): Promise<void> {
   const text = process.env.SDLC_ROLE_OUTPUT ?? "";
   const output =
     text === "" ? undefined : roleJobOutputSchema.parse(JSON.parse(text));
-  const result = await advance(await jobContext(TOKENS), given.issue, output);
+  const context = {
+    ...(await jobContext(TOKENS)),
+    appId: appId(),
+    appLogin: appLogin(),
+  };
+  const result = await advance(context, given.issue, output);
   console.log(`Next role: ${result.role ?? "none"}`);
   await setOutputs({ role: result.role ?? "" });
 }

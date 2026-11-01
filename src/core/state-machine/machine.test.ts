@@ -115,7 +115,7 @@ const CASES: Case[] = [
     from: progress("reviewing", { reviewRound: 1 }),
     event: { type: "verdict", verdict: "approve", blockingFindings: [] },
     to: "awaiting-human-review",
-    actions: [],
+    actions: [{ type: "request-review" }],
   },
   {
     rule: "review-repeated-finding",

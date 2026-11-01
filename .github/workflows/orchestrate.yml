@@ -10,10 +10,12 @@ name: Orchestrate
 # the Developer follows without any GitHub event.
 #
 # Only the role jobs, in the `agents` environment, get the Claude Code token,
-# and only the session process receives it (plan 4). The Planner and the
-# Developer run on Claude Code; the Reviewer stays a stub until P7. The
-# Developer's job commits and pushes the session's work with the app token
-# from its own git directory, outside the workspace (plan 3.4).
+# and only the session process receives it (plan 4). Every role runs on
+# Claude Code. The Developer's job commits and pushes the session's work with
+# the app token from its own git directory, outside the workspace (plan 3.4).
+# The Reviewer's job posts a review that only comments and the `agent-review`
+# check run (FR-6.2). After `approve`, the advance job asks a human for the
+# final review (FR-4.20), so it knows the app's bot, the author of reviews.
 # Each job that writes gets a GitHub App token narrowed to its scope in
 # src/orchestrator/scopes.ts, and every scope there names a permission,
 # because a token request without any permission input inherits all
@@ -252,6 +254,7 @@ jobs:
         env:
           SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
           SDLC_READ_TOKEN: ${{ github.token }}
+          SDLC_APP_SLUG: ${{ steps.token.outputs.app-slug }}
           SDLC_ROLE_OUTPUT: ${{ needs.role.outputs.output }}
         run: npm run --silent --prefix pipeline orchestrator -- advance --issue "$ISSUE"
       - if: always()
@@ -377,10 +380,12 @@ jobs:
           permission-pull-requests: ${{ steps.scope.outputs.pull-requests }}
           permission-checks: ${{ steps.scope.outputs.checks }}
       # A third role would need a third job; the Developer never hands over
-      # without a GitHub event, so the advance job only records it.
+      # without a GitHub event, because even replies alone to review findings
+      # end with a push (FR-4.15), so the advance job only records it.
       - env:
           SDLC_APP_TOKEN: ${{ steps.token.outputs.token }}
           SDLC_READ_TOKEN: ${{ github.token }}
+          SDLC_APP_SLUG: ${{ steps.token.outputs.app-slug }}
           SDLC_ROLE_OUTPUT: ${{ needs.role-2.outputs.output }}
         run: npm run --silent --prefix pipeline orchestrator -- advance --issue "$ISSUE"
       - if: always()
