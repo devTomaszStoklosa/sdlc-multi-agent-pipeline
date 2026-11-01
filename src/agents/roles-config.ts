@@ -13,10 +13,22 @@ const roleSettingsSchema = z.strictObject({
 });
 
 // prompts/roles.yml: the versioned model and prompt of each role (FR-5.8).
-const rolesFileSchema = z.strictObject({
-  version: z.literal(1),
-  roles: z.partialRecord(z.enum(ROLES), roleSettingsSchema),
-});
+// The Reviewer runs on another model than the Developer, so their blind spots
+// overlap less (FR-5.5).
+const rolesFileSchema = z
+  .strictObject({
+    version: z.literal(1),
+    roles: z.partialRecord(z.enum(ROLES), roleSettingsSchema),
+  })
+  .refine(
+    ({ roles }) =>
+      roles.reviewer === undefined ||
+      roles.reviewer.model !== roles.developer?.model,
+    {
+      path: ["roles", "reviewer", "model"],
+      message: "The Reviewer needs another model than the Developer (FR-5.5).",
+    },
+  );
 
 export type RolesFile = z.infer<typeof rolesFileSchema>;
 
