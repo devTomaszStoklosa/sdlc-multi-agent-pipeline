@@ -54,7 +54,7 @@ describe("StubRoleRunner", () => {
       },
     });
     expect(await run(input("reviewer", ""))).toMatchObject({
-      output: { verdict: "approve", findings: [] },
+      output: { review: { findings: [], earlier: [] } },
     });
   });
 
@@ -82,23 +82,63 @@ describe("StubRoleRunner", () => {
     });
   });
 
-  it("returns the verdicts by round, with new or repeated findings", async () => {
+  it("returns findings by round, new or repeated", async () => {
     const body = scenario("verdicts: [changes_requested, approve]");
     const first = await run(input("reviewer", body));
     expect(first).toMatchObject({
       output: {
-        verdict: "changes_requested",
-        findings: [{ id: "stub-finding-1", blocking: true }],
+        review: {
+          findings: [
+            { path: "stub-runs/issue-12.json", rule: "scope", blocking: true },
+          ],
+        },
       },
     });
-    const second = await run(input("reviewer", body, { reviewRound: 2 }));
-    expect(second).toMatchObject({ output: { verdict: "approve" } });
+    const brief = {
+      kind: "reviewer" as const,
+      plan: { version: 1, body: "", url: "" },
+      sha: "abc1234",
+      diff: [],
+      gates: { jobs: [] },
+      earlier: [
+        {
+          finding: {
+            id: "F-000000000001",
+            path: "stub-runs/issue-12.json",
+            line: 1,
+            rule: "scope" as const,
+            blocking: true,
+            description: "",
+            suggestion: "",
+          },
+          replies: [],
+        },
+      ],
+    };
+    const second = await run(
+      input("reviewer", body, { reviewRound: 2, brief }),
+    );
+    expect(second).toMatchObject({
+      output: {
+        review: {
+          findings: [],
+          earlier: [{ id: "F-000000000001", resolved: true }],
+        },
+      },
+    });
     const repeated = scenario(
       "verdicts: [changes_requested]\nrepeat_finding: true",
     );
-    const again = await run(input("reviewer", repeated, { reviewRound: 3 }));
+    const again = await run(
+      input("reviewer", repeated, { reviewRound: 3, brief }),
+    );
     expect(again).toMatchObject({
-      output: { findings: [{ id: "stub-finding" }] },
+      output: {
+        review: {
+          findings: [{ rule: "scope" }],
+          earlier: [{ id: "F-000000000001", resolved: false }],
+        },
+      },
     });
   });
 

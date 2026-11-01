@@ -1,7 +1,7 @@
 import { briefOf } from "../brief.ts";
-import { cut, dataSection, type DataPiece } from "../prompt-data.ts";
+import { cut, dataSection, diffText, type DataPiece } from "../prompt-data.ts";
 import type { RoleInput } from "../role-runner.ts";
-import type { BranchDiff, PlannerBrief } from "./brief.ts";
+import type { PlannerBrief } from "./brief.ts";
 
 // Limits that keep the prompt, and so the use of the plan's limits, small.
 const MAX_TEXT = 20_000;
@@ -13,14 +13,6 @@ const EMPTY: PlannerBrief = {
   comments: [],
   previousPlans: [],
 };
-
-function diffText(diff: BranchDiff): string {
-  const files = diff.files.map(
-    (file) =>
-      `--- ${file.path} (+${String(file.additions)} -${String(file.deletions)})\n${file.patch ?? "(no patch: the file is large or binary)"}`,
-  );
-  return cut(files.join("\n\n"), MAX_DIFF);
-}
 
 function pieces(input: RoleInput): DataPiece[] {
   const brief = briefOf(input.brief, "planner") ?? EMPTY;
@@ -49,7 +41,7 @@ function pieces(input: RoleInput): DataPiece[] {
       : [
           [
             `diff of branch ${branchDiff.branch} against ${branchDiff.base}`,
-            diffText(branchDiff),
+            diffText(branchDiff.files, MAX_DIFF),
           ] as const,
         ]),
   ];

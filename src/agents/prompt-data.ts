@@ -1,10 +1,20 @@
 import { randomBytes } from "node:crypto";
+import type { ChangedFile } from "../github/ports.ts";
 
 // One piece of untrusted data in a prompt: where it comes from and its text.
 export type DataPiece = readonly [source: string, text: string];
 
 export function cut(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n[... truncated]`;
+}
+
+// The files of a diff with their patches, cut to a limit.
+export function diffText(files: readonly ChangedFile[], max: number): string {
+  const texts = files.map(
+    (file) =>
+      `--- ${file.path} (+${String(file.additions)} -${String(file.deletions)})\n${file.patch ?? "(no patch: the file is large or binary)"}`,
+  );
+  return cut(texts.join("\n\n"), max);
 }
 
 // A random value for the data tags, so the data cannot close its own tag.
