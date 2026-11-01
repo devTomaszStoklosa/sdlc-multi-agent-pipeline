@@ -15,7 +15,6 @@ function input(brief: RoleInput["brief"] = aReviewerBrief()): RoleInput {
     planVersion: 1,
     reviewRound: 1,
     pushes: 1,
-    findings: [],
     attempt: 1,
     config: configText(),
     maxTurns: 50,

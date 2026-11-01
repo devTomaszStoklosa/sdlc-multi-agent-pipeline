@@ -14,6 +14,15 @@ describe("workSchema", () => {
     expect(workSchema.safeParse(work).success).toBe(true);
   });
 
+  it("accepts replies to review findings (FR-4.15)", () => {
+    const work = aWork({
+      replies: [
+        { finding: "F-0123456789ab", reply: "Celowe: wymaga tego API." },
+      ],
+    });
+    expect(workSchema.safeParse(work).success).toBe(true);
+  });
+
   it.each([
     [
       "a multi-line subject",
@@ -56,6 +65,14 @@ describe("workSchema", () => {
           highImpact: { value: true, reasons: [] },
         },
       }),
+    ],
+    [
+      "an empty reply to a finding",
+      aWork({ replies: [{ finding: "F-0123456789ab", reply: " " }] }),
+    ],
+    [
+      "a reply to a finding with a multi-line identifier",
+      aWork({ replies: [{ finding: "F-1\nF-2", reply: "R" }] }),
     ],
   ])("rejects %s", (_name, work) => {
     expect(workSchema.safeParse(work).success).toBe(false);

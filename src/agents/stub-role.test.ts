@@ -15,7 +15,6 @@ function input(
     planVersion: 0,
     reviewRound: 1,
     pushes: 0,
-    findings: [],
     attempt: 1,
     config: "",
     maxTurns: 50,

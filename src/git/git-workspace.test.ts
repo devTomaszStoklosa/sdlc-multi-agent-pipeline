@@ -134,6 +134,19 @@ describe("GitWorkspace", { timeout: 60_000 }, () => {
     expect(await work.commit("feat: nothing (#12)")).toBe(false);
   });
 
+  it("commits nothing new only when asked to, for replies alone", async () => {
+    clone();
+    const work = workspaceOf();
+    await work.prepare({});
+    expect(await work.commit("chore: answer review findings (#12)", true)).toBe(
+      true,
+    );
+    await work.push("feat/12-a");
+    expect(originLog("feat/12-a", "%s")).toBe(
+      "chore: answer review findings (#12)",
+    );
+  });
+
   it("leaves out the empty files that the sandbox mounts over", async () => {
     await pushFrom("main", "yarn.lock", "");
     clone();

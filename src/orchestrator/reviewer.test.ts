@@ -68,11 +68,7 @@ async function reviewed(...reviews: Review[]) {
   const reviewer = new ScriptedReviewer(...reviews);
   repo.runner = reviewer;
   await repo.label(1, "agent:ready");
-  const sha = (await repo.run(1)).progress.pushedSha ?? "";
-  repo.github.files.set(`${sha}:src/price.ts`, FILE);
-  repo.github.diffs.set(sha, [
-    { path: "src/price.ts", additions: 2, deletions: 0, patch: PATCH },
-  ]);
+  const sha = await repo.pushedFile(1, "src/price.ts", FILE, PATCH);
   const jobs = [{ id: 1, name: "test", conclusion: "success", log: "" }];
   const roles = await repo.gates(1, "success", jobs);
   return { repo, reviewer, roles, sha };

@@ -15,6 +15,8 @@ export interface EffectScope {
   guard: RunGuard;
   run: Run;
   issue: { number: number; title: string; body: string };
+  // The bot of the pipeline's app, the author of its reviews.
+  appLogin: string;
   // The in-progress `agent-review` check run of a Reviewer job.
   checkRunId?: number;
   // What the job gathered for the session.

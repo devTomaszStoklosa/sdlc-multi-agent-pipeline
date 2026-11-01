@@ -32,9 +32,10 @@ export class MemoryWorkspace implements RunWorkspace {
     return Promise.resolve(paths.filter((file) => this.markers.includes(file)));
   }
 
-  commit(message: string): Promise<boolean> {
-    if (this.changed) this.commits.push(message);
-    return Promise.resolve(this.changed);
+  commit(message: string, allowEmpty = false): Promise<boolean> {
+    const committed = this.changed || allowEmpty;
+    if (committed) this.commits.push(message);
+    return Promise.resolve(committed);
   }
 
   diff(): Promise<WorkspaceChange[]> {

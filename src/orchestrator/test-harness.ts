@@ -204,6 +204,17 @@ export class Harness {
     });
   }
 
+  // The run's last push changes one file, which its review reads.
+  async pushedFile(issue: number, file: string, text: string, patch: string) {
+    const sha = (await this.run(issue)).progress.pushedSha ?? "";
+    this.github.files.set(`${sha}:${file}`, text);
+    const additions = patch.split("\n").filter((l) => l.startsWith("+"));
+    this.github.diffs.set(sha, [
+      { path: file, additions: additions.length, deletions: 0, patch },
+    ]);
+    return sha;
+  }
+
   async dispatch(issue: number, sender = AUTHOR): Promise<Role[]> {
     return this.orchestrate({
       name: "workflow_dispatch",

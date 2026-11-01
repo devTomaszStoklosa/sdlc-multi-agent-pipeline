@@ -8,6 +8,19 @@ export function cut(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n[... truncated]`;
 }
 
+// The issue and the plan version that a session works on.
+export function issueAndPlan(
+  issue: { title: string; body: string },
+  plan: { version: number; body: string },
+  max: number,
+): DataPiece[] {
+  return [
+    ["issue title", issue.title],
+    ["issue body", cut(issue.body, max)],
+    [`plan, version ${String(plan.version)}`, cut(plan.body, max)],
+  ];
+}
+
 // The files of a diff with their patches, cut to a limit.
 export function diffText(files: readonly ChangedFile[], max: number): string {
   const texts = files.map(

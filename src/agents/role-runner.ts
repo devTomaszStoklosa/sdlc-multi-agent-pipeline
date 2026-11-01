@@ -14,7 +14,6 @@ export interface RoleInput {
   planVersion: number;
   reviewRound: number;
   pushes: number;
-  findings: readonly string[];
   // 1 for the first attempt of the stage, more for its retries (FR-4.30).
   attempt: number;
   // The run's .sdlc-agents.yml copy (FR-10.5) and the turn limit of a stage.

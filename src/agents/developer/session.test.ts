@@ -23,7 +23,6 @@ function input(paths: string[]): RoleInput {
     planVersion: 1,
     reviewRound: 0,
     pushes: 0,
-    findings: [],
     attempt: 1,
     config: configText(),
     maxTurns: 30,

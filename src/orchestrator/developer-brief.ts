@@ -1,17 +1,14 @@
 import type { DeveloperBrief, GateFailure } from "../agents/developer/brief.ts";
-import { planEntries, planOf } from "../agents/planner/plan-comment.ts";
 import type { OrgBaseline } from "../config/schema.ts";
 import type { RunRecord } from "../core/run-store/run-record.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
 import type { CommandRunner } from "../hooks/commands.ts";
-import type {
-  CommentsPort,
-  ContentsPort,
-  WorkflowRunsPort,
-} from "../github/ports.ts";
+import type { ContentsPort, WorkflowRunsPort } from "../github/ports.ts";
 import { redactText } from "../hooks/redact.ts";
 import { mergeMessage } from "./developer-commit.ts";
 import { runConfig } from "./limits.ts";
+import { openReview, type ReviewSources } from "./review-history.ts";
+import { runPlan } from "./run-plan.ts";
 import { StageError } from "./stage-error.ts";
 
 const MAX_FAILED_JOBS = 5;
@@ -20,8 +17,7 @@ const MAX_INSTALL_OUTPUT = 1500;
 // GitHub starts every log line with a time stamp.
 const TIME_STAMP = /^\d{4}-\d\d-\d\dT[\d:.]+Z /gm;
 
-export interface DeveloperSources {
-  comments: CommentsPort;
+export interface DeveloperSources extends ReviewSources {
   contents: ContentsPort;
   // The job's read-only workflow token, which may read the gate logs.
   runs: WorkflowRunsPort;
@@ -29,7 +25,6 @@ export interface DeveloperSources {
   // Runs the install command in bubblewrap with the network (plan 3.4).
   installer: CommandRunner;
   baseline: OrgBaseline;
-  appId: number;
   // The name of the repository's gates workflow (plan 3.5).
   gatesWorkflow: string;
 }
@@ -76,24 +71,16 @@ async function install(sources: DeveloperSources, command: string) {
 }
 
 // What a Developer session gets besides the issue (SEC-8.10): the plan
-// version it implements, the failed gates of its last push and the conflicts
-// left by merging the main branch into the branch of an earlier run, which the
-// job does before the session (FR-4.28b), with the dependencies installed.
+// version it implements, the failed gates of its last push, the open findings
+// of the latest review (FR-4.15) and the conflicts left by merging the main
+// branch into the branch of an earlier run, which the job does before the
+// session (FR-4.28b), with the dependencies installed.
 export async function developerBrief(
   sources: DeveloperSources,
   record: RunRecord,
 ): Promise<DeveloperBrief> {
   const { run } = record;
-  const entries = planEntries(
-    await sources.comments.listComments(record.issue),
-    sources.appId,
-  );
-  const plan = planOf(entries, run.id, run.progress.planVersion);
-  if (plan === undefined) {
-    throw new Error(
-      `Plan version ${String(run.progress.planVersion)} of run ${run.id} is missing.`,
-    );
-  }
+  const plan = await runPlan(sources, record.issue, run);
   const main = await sources.contents.defaultBranch();
   // The first stage of a run that continues an earlier run's branch.
   const merge =
@@ -111,7 +98,7 @@ export async function developerBrief(
   await install(sources, commands.install);
   return {
     kind: "developer",
-    plan: { version: plan.block.version, body: plan.body, url: plan.url },
+    plan,
     branch: run.branch,
     gateFailures: await gateFailures(sources, run.progress.pushedSha),
     conflicts,
@@ -120,5 +107,6 @@ export async function developerBrief(
       lint: commands.lint,
       test: commands.test,
     },
+    review: await openReview(sources, run),
   };
 }

@@ -1,5 +1,11 @@
 import { briefOf } from "../brief.ts";
-import { cut, dataSection, diffText, type DataPiece } from "../prompt-data.ts";
+import {
+  cut,
+  dataSection,
+  diffText,
+  issueAndPlan,
+  type DataPiece,
+} from "../prompt-data.ts";
 import type { RoleInput } from "../role-runner.ts";
 import type { EarlierFinding, ReviewerBrief } from "./brief.ts";
 import { where } from "./review-comment.ts";
@@ -34,7 +40,12 @@ function facts(input: RoleInput, given: ReviewerBrief): string[] {
   ];
 }
 
-function earlierText(entries: readonly EarlierFinding[]): string {
+// Open findings of a review with the Developer's replies, for the Developer
+// that answers them and for the round that checks them.
+export function findingsText(
+  entries: readonly EarlierFinding[],
+  max: number,
+): string {
   const texts = entries.map(({ finding, replies }) =>
     [
       `${finding.id} · rule ${finding.rule} · ${where(finding)}`,
@@ -45,24 +56,19 @@ function earlierText(entries: readonly EarlierFinding[]): string {
         : replies.map((reply) => `Developer's reply: ${reply}`)),
     ].join("\n"),
   );
-  return cut(texts.join("\n\n"), MAX_EARLIER);
+  return cut(texts.join("\n\n"), max);
 }
 
 function pieces(input: RoleInput, given: ReviewerBrief): DataPiece[] {
   return [
-    ["issue title", input.issue.title],
-    ["issue body", cut(input.issue.body, MAX_TEXT)],
-    [
-      `plan, version ${String(given.plan.version)}`,
-      cut(given.plan.body, MAX_TEXT),
-    ],
+    ...issueAndPlan(input.issue, given.plan, MAX_TEXT),
     ["diff against the main branch", diffText(given.diff, MAX_DIFF)],
     ...(given.earlier.length === 0
       ? []
       : [
           [
             "earlier findings and the Developer's replies",
-            earlierText(given.earlier),
+            findingsText(given.earlier, MAX_EARLIER),
           ] as const,
         ]),
   ];

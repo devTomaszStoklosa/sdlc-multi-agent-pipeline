@@ -30,8 +30,10 @@ export interface RunWorkspace {
   // markers.
   unresolved(paths: readonly string[]): Promise<string[]>;
   // Commits the session's changes, after the merge commit of resolved
-  // conflicts. False when there is nothing new to push.
-  commit(message: string): Promise<boolean>;
+  // conflicts. With `allowEmpty`, a session without changes still gets a
+  // commit, whose push runs the gates and the next review (FR-4.15). False
+  // when there is nothing new to push.
+  commit(message: string, allowEmpty?: boolean): Promise<boolean>;
   // What the branch changes against the main branch, as its pull request
   // shows it.
   diff(main: string): Promise<WorkspaceChange[]>;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configText } from "../../config/fixtures.ts";
 import type { RoleInput } from "../role-runner.ts";
+import { aFinding } from "../reviewer/fixtures.ts";
 import { aBrief } from "./fixtures.ts";
 import { developerPrompt } from "./prompt.ts";
 
@@ -14,7 +15,6 @@ function input(brief: RoleInput["brief"] = aBrief()): RoleInput {
     planVersion: 1,
     reviewRound: 0,
     pushes: 0,
-    findings: [],
     attempt: 1,
     config: configText(),
     maxTurns: 50,
@@ -40,16 +40,18 @@ describe("developerPrompt", () => {
 
   it("adds the branch, the conflicts, the gate logs and the findings", () => {
     const prompt = developerPrompt(
-      {
-        ...input(
-          aBrief({
-            branch: "feat/12-rabat",
-            conflicts: ["src/price.ts"],
-            gateFailures: [{ job: "lint", log: "error: no-unused-vars" }],
-          }),
-        ),
-        findings: ["f-1"],
-      },
+      input(
+        aBrief({
+          branch: "feat/12-rabat",
+          conflicts: ["src/price.ts"],
+          gateFailures: [{ job: "lint", log: "error: no-unused-vars" }],
+          review: {
+            sha: "abc1234def",
+            url: "https://github.test/r/1",
+            findings: [{ finding: aFinding(), replies: [] }],
+          },
+        }),
+      ),
       "# Developer",
       NONCE,
     );
@@ -61,7 +63,13 @@ describe("developerPrompt", () => {
     expect(prompt).toContain(
       `<data-${NONCE} source="log of the failed gate job lint">\nerror: no-unused-vars\n</data-${NONCE}>`,
     );
-    expect(prompt).toContain("blocking findings: f-1.");
+    expect(prompt).toContain(
+      "The review of commit `abc1234` left blocking findings open",
+    );
+    expect(prompt).toContain(
+      `<data-${NONCE} source="open review findings">
+F-0123456789ab · rule kiss · src/price.ts:2`,
+    );
   });
 
   it("needs a brief", () => {

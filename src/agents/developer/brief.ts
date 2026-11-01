@@ -1,3 +1,5 @@
+import type { EarlierFinding } from "../reviewer/brief.ts";
+
 // A job of the gates workflow that failed on the run's last push, with the
 // end of its log (FR-4.12).
 export interface GateFailure {
@@ -19,4 +21,7 @@ export interface DeveloperBrief {
   conflicts: string[];
   // The commands of the run's configuration that the session runs itself.
   commands: { install: string; lint: string; test: string };
+  // The open blocking findings of the run's latest review that requested
+  // changes, for the session to fix or answer (FR-4.15).
+  review?: { sha: string; url: string; findings: EarlierFinding[] };
 }
