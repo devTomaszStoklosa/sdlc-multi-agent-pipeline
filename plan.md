@@ -118,7 +118,7 @@ Dzięki temu zakazy z SEC-9.2, SEC-9.6, SEC-9.7 i SEC-9.8 są wymuszone struktur
 |---|---|---|
 | `core/state-machine` | Czysta funkcja: stan i zdarzenie na wejściu, nowy stan i lista akcji na wyjściu, według spec 4.2 | FR-5.6 |
 | `core/run-store` | Interfejs `RunStateStore` z implementacją na komentarzu w issue i implementacją w pamięci do testów. Interfejs uzasadniają testy i możliwa baza danych w F5. | FR-4.29 |
-| `config` | Schemat `.sdlc-agents.yml` (zod), scalanie z bazą organizacji tylko w stronę zaostrzenia, także dla kopii zapisanej przy starcie przebiegu | FR-10.1, FR-10.2, FR-10.5 |
+| `config` | Schemat `.sdlc-agents.yml` (zod), scalanie z bazą organizacji tylko w stronę zaostrzenia, także dla kopii zapisanej przy starcie przebiegu; listy hostów harden-runnera dla jobów workflowów (rozdz. 4) | FR-10.1, FR-10.2, FR-10.5, SEC-8.4 |
 | `github` | Klient Octokit, sprawdzanie uprawnień autora zdarzenia (triage, zapis, bot), etykiety, PR, check runy | FR-4.1, FR-4.23, FR-4.33, SEC-8.6, SEC-8.7 |
 | `hooks` | Każda reguła jako osobna polityka za wspólnym interfejsem, opakowanie fail-closed, zestaw bazowy plus zaostrzenia repozytorium | SEC-9.0a, SEC-9.0b, spec 9.2 |
 | `agents` | Adapter roli (ustrukturyzowane wejście i wyjście), implementacja na Claude Code CLI, role Planner, Developer i Reviewer, model roli z `prompts/roles.yml` | FR-5.1, FR-5.5, FR-5.8 |
@@ -225,6 +225,7 @@ W repozytorium publicznym każdy może założyć issue i dodać komentarz, a lo
 | Agent nie zmienia workflow | GitHub App bez uprawnienia `workflows` (OQ-8). Hook i bramka zakresu dodatkowo blokują zmiany w `.github/`. | SEC-9.1, QG-7.9, QG-7.11 | P2, P3, P6 | Testy hooków; próba w P8 |
 | Nic nie wycieka do logów | Polecenia powłoki agenta nie dziedziczą tokenu. Hooki blokują odczyt zmiennych środowiskowych i plików z sekretami. Wyniki narzędzi, komentarze i log audytowy przechodzą przez redakcję sekretów, także zakodowanych w base64 i hex. Pełne transkrypty sesji nie trafiają ani do logów, ani do artefaktów; artefakt audytu zawiera tylko podsumowania. | SEC-9.3, SEC-9.10, NFR-9.11 | P2 | Testy hooków z przypadkami ataku; przegląd logów w P8 |
 | Treść niezaufana | Issue i komentarze trafiają do agenta jako dane, nie jako instrukcje. | SEC-8.5 | P2, P5, P6, P7 | Issue z wstrzykniętą instrukcją w P8 |
+| Ruch wychodzący tylko do listy | Każdy job workflowów pipeline'u zaczyna się od harden-runnera w trybie `block`, bez telemetrii. Lista joba to grupy hostów z `src/config/egress.ts`: GitHub, rejestr npm pipeline'u, `network.allowed_hosts` bazy organizacji dla jobów z poleceniami repozytorium i sesją agenta, `api.anthropic.com` i apt tylko dla sesji agenta. Sandbox Claude Code i hook sieci ograniczają dodatkowo samą sesję (SEC-9.0c). `*.blob.core.windows.net` przepuszcza każde konto Azure Storage, bo GitHub zapisuje logi i artefakty na kontach o zmiennych nazwach. | SEC-8.4, SEC-9.0c, SEC-9.4 | F6 (#68) | `egress.test.ts`; `curl` do hosta spoza listy w jobie bramki repozytorium demo |
 
 **Procedura na wypadek wycieku:** unieważnić token, wygenerować nowy przez `claude setup-token`, podmienić sekret w środowisku `agents`, przejrzeć logi i artefakty workflow od chwili możliwego wycieku. Rotacja planowa raz na kwartał.
 
@@ -371,13 +372,13 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 |---|---|---|---|
 | SEC-8.1, SEC-8.2 | MVP | P3, P4 | |
 | SEC-8.3 | MVP | P4 | Runnery hostowane przez GitHub to jednorazowe maszyny per job. |
-| SEC-8.4 | Odstępstwo | P2, F6 | Częściowo przez sandbox poleceń powłoki w Claude Code (do potwierdzenia). |
+| SEC-8.4 | MVP | P2, F6 | Harden-runner w trybie `block` w każdym jobie workflowów pipeline'u (rozdz. 4, #68), a w sesji agenta także sandbox Claude Code. W repozytorium demo `curl` do hosta spoza listy w jobie bramki skończył się błędem, a pełny przebieg w trybie `block` doszedł do `awaiting-human-review`. Wildcard `*.blob.core.windows.net` zostaje furtką (rozdz. 4). |
 | SEC-8.5 | MVP | P2, P5 do P7 | |
 | SEC-8.6, SEC-8.7, SEC-8.9 | MVP | P4 | Liczenie M-E06 w F5. |
 | SEC-8.8 | MVP | P4 | W trybie Actions GitHub dostarcza zdarzenia wewnętrznie i nie ma publicznego endpointu webhooków. Wymóg wraca przy własnym serwerze. |
 | SEC-8.10 | MVP | P5 do P7 | Agent dostaje tylko issue, plan, diff i przestrzeń roboczą repozytorium demo. |
 | SEC-9.0a, SEC-9.0b | MVP | P2 | |
-| SEC-9.0c | Częściowo | P2 | Razem z SEC-8.4. Sandbox odcina sieć spoza listy, ale zapisu w katalogu domowym runnera zabrania tylko dla konfiguracji narzędzi (rozdz. 3.4, rozdz. 12, założenie 5). |
+| SEC-9.0c | Częściowo | P2, F6 | Razem z SEC-8.4. Sandbox i harden-runner odcinają sieć spoza listy, ale sandbox zapisu w katalogu domowym runnera zabrania tylko dla konfiguracji narzędzi (rozdz. 3.4, rozdz. 12, założenie 5). |
 | SEC-9.1, SEC-9.2, SEC-9.3, SEC-9.4, SEC-9.5, SEC-9.6, SEC-9.7, SEC-9.8 | MVP | P2 | SEC-9.4 w granicach SEC-8.4. |
 | SEC-9.8a | MVP | P4 | Strukturalnie: sesja nie ma narzędzi ze skutkami w GitHubie (rozdz. 3.2), a sprawdzenie z FR-4.28c wykonuje kod joba. |
 | QG-9.9, SEC-9.10, NFR-9.11, QG-9.12 | MVP | P2 | |
@@ -426,7 +427,6 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Brak stanu `handling-comments` (spec 4.7) | Najmniejszy działający przebieg | F2 |
 | Brak bramki ewaluacji (QG-12.4) | Zestaw ewaluacji wymaga pracy ludzi i limitu Pro | F4; do tego czasu testy hooków |
 | JSONL zamiast logu tylko do dopisywania i trace (NFR-11.1, NFR-11.2) | Zero infrastruktury | F5 |
-| Allowlista ruchu sieciowego tylko częściowo (SEC-8.4, SEC-9.0c) | Runnery hostowane przez GitHub nie mają wbudowanej allowlisty | F6 |
 | Limit kosztu jako szacunek zużycia (NFR-11.5) | Subskrypcja zamiast płatności za tokeny | Do czasu zmiany modelu rozliczeń |
 | Brak linii bazowej i dashboardu z fazy 0 (spec 14.13, spec 15) | Nie mają sensu, zanim pipeline zadziała | F5 |
 | Brak okresowego porównania przebiegów z etykietami (FR-4.28e) | W trybie Actions GitHub dostarcza zdarzenia wewnętrznie, bez webhooków. Zgubione `agent:stop` nie da skutku ubocznego dzięki sprawdzeniu z FR-4.28c, a job roli kończy się najpóźniej z limitem 45 minut. Porządki z FR-4.28a i podsumowanie wymagają wtedy ponownego dodania etykiety. | Przy własnym serwerze webhooków, razem z SEC-8.8 |
@@ -452,6 +452,8 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Zmiany w Claude Code CLI | Inne flagi lub zachowanie hooków | Przypięta wersja, testy hooków w CI |
 | Dziedziczenie tokenu przez polecenia powłoki | Agent może odczytać token | Sprawdzenie w P2, oczyszczone środowisko, blokada `env` i `printenv`, redakcja wyników |
 | Zmiana pipeline'u wymaga przepięcia commitu w repozytorium demo | Repozytorium demo działa na starej wersji | Przepięcie cienkich workflow na commit `main` pipeline'u po merge'u każdego przyrostu, w PR repozytorium demo; to samo SHA w `uses:` i w `pipeline-ref` |
+| Harden-runner blokuje ruch tylko w repozytoriach publicznych za darmo | Pilotaż albo repozytorium prywatne bez allowlisty ruchu | Pilotaż na repozytorium publicznym (rozdz. 6); dla prywatnego tier Enterprise albo powrót do samego sandboxa sesji |
+| Lista hostów nie nadąża za zmianami akcji i runnerów | Job pada na blokadzie dozwolonego ruchu, np. po zmianie hostów pobierania akcji albo resolvera DNS runnera (v2.22.2, step-security/harden-runner#708) | Wpis `domain not allowed` w logu joba; przebieg akcji w trybie `audit` po jej aktualizacji; poprawka listy w `src/config/egress.ts` (README, „Ruch wychodzący jobów”) |
 | Obejście `agent-review` na PR agenta w trakcie przebiegu | Człowiek merguje PR bez approve Reviewera, a w repozytorium demo także bez approvalu code ownera | Obejście ma tylko administrator; bramki nadal obowiązują; autor zatwierdza PR agenta przed merge'em, bo obejście zwalnia też z approvalu (rozdz. 8); merge zarządzanego PR kończy przebieg (spec 9.4) |
 
 ---
