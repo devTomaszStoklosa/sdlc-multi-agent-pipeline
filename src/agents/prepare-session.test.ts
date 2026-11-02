@@ -63,6 +63,10 @@ describe("prepare-session", () => {
         allowed_hosts: ["registry.npmjs.org"],
       },
       commands: { format: "npm run format", lint: "npm run lint" },
+      environment: {
+        SDLC_STATIC_ANALYSIS_FAIL_ON: "error",
+        SDLC_MAX_FUNCTION_COMPLEXITY: "10",
+      },
     });
     const settings = await readJson(path.join(out, "claude-settings.json"));
     expect(settings).toMatchObject({

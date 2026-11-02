@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gateEnvironment } from "../config/gate-environment.ts";
 import type { EffectiveConfig } from "../config/policy.ts";
 import { ROLES, type Role } from "./roles.ts";
 
@@ -19,6 +20,8 @@ export const hookContextSchema = z.strictObject({
     lint: z.string().min(1),
     test: z.string().min(1),
   }),
+  // The gate thresholds for the lint and test commands (QG-7.12).
+  environment: z.record(z.string(), z.string()),
   // The dependency manifests of the plan, relative to the workspace, and the
   // command that installs them after a write (#49). Only a Developer session
   // of a plan that changes a manifest has it.
@@ -51,6 +54,7 @@ export function createHookContext(
     audit_log: session.auditLog,
     rules: { ...config.hooks, allowed_hosts: config.network.allowed_hosts },
     commands: { format, lint, test },
+    environment: gateEnvironment(config.gates),
     ...(update_lockfile === undefined || manifests.length === 0
       ? {}
       : {

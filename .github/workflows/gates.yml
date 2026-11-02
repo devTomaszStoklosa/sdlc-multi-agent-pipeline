@@ -1,0 +1,397 @@
+name: Gates
+
+# The quality gates (spec 7.1, QG-7.12), called from the gates workflow of a
+# connected repository on its pull_request events and pushes to main. Each job
+# is a required check of the repository's "gates" ruleset, named
+# `<caller job> / <job>`, so a renamed job must be renamed there too. The
+# ruleset also requires `config` and the CodeQL jobs: a job skipped because a
+# job it needs failed is `skipped`, and a skipped required check passes.
+#
+# The config job reads .sdlc-agents.yml from the base commit of the pull
+# request and merges it with the organization baseline (FR-10.2). The other
+# jobs take their commands and thresholds from it, so a pull request cannot
+# change its own gates. The repository's tools apply the thresholds that only
+# they can, such as the complexity rule of the linter, from the environment
+# (src/config/gate-environment.ts); the pipeline applies the others itself.
+# Commands reach a step through `env`, never through an expression in `run`.
+#
+# The jobs run the repository's code with the read-only workflow token and no
+# secret, and none may create check runs or commit statuses (QG-7.14).
+on:
+  workflow_call:
+    inputs:
+      pipeline-ref:
+        description: Commit of this repository whose code the jobs run.
+        required: true
+        type: string
+      codeql-languages:
+        description: The CodeQL languages of the repository, as a JSON array.
+        required: false
+        type: string
+        default: '["actions", "javascript-typescript"]'
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  # The base commit of a pull request, or the pushed commit on main.
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      install: ${{ steps.config.outputs.install }}
+      build: ${{ steps.config.outputs.build }}
+      test: ${{ steps.config.outputs.test }}
+      lint: ${{ steps.config.outputs.lint }}
+      format: ${{ steps.config.outputs.format }}
+      coverage: ${{ steps.config.outputs.coverage }}
+      sast_fail_on: ${{ steps.config.outputs.sast_fail_on }}
+      dependency_scan_fail_on: ${{ steps.config.outputs.dependency_scan_fail_on }}
+      coverage_drop_tolerance: ${{ steps.config.outputs.coverage_drop_tolerance }}
+      max_duplication_percent: ${{ steps.config.outputs.max_duplication_percent }}
+      environment: ${{ steps.config.outputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BASE_SHA }}
+          path: base
+          sparse-checkout: .sdlc-agents.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - id: config
+        run: npm run --silent --prefix pipeline gate-config -- "$GITHUB_WORKSPACE/base/.sdlc-agents.yml"
+
+  format:
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workspace
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/gate-setup
+        with:
+          environment: ${{ needs.config.outputs.environment }}
+          install: ${{ needs.config.outputs.install }}
+      # The hooks append file paths to the format command, so it gets the
+      # whole tree here; any file it changes is not formatted.
+      - working-directory: workspace
+        env:
+          GATE_COMMAND: ${{ needs.config.outputs.format }}
+        run: |
+          sh -c "$GATE_COMMAND \"\$@\"" sh .
+          git diff --exit-code
+
+  # QG-7.1 and the complexity threshold of QG-7.7.
+  lint:
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workspace
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/gate-setup
+        with:
+          environment: ${{ needs.config.outputs.environment }}
+          install: ${{ needs.config.outputs.install }}
+      - working-directory: workspace
+        env:
+          GATE_COMMAND: ${{ needs.config.outputs.lint }}
+        run: sh -c "$GATE_COMMAND"
+
+  # Skipped without commands.build; a skipped job passes as a required check.
+  build:
+    needs: config
+    if: needs.config.outputs.build != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workspace
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/gate-setup
+        with:
+          environment: ${{ needs.config.outputs.environment }}
+          install: ${{ needs.config.outputs.install }}
+      - working-directory: workspace
+        env:
+          GATE_COMMAND: ${{ needs.config.outputs.build }}
+        run: sh -c "$GATE_COMMAND"
+
+  # QG-7.5
+  test:
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workspace
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/gate-setup
+        with:
+          environment: ${{ needs.config.outputs.environment }}
+          install: ${{ needs.config.outputs.install }}
+      - working-directory: workspace
+        env:
+          GATE_COMMAND: ${{ needs.config.outputs.test }}
+        run: sh -c "$GATE_COMMAND"
+
+  # QG-7.6: line coverage of the pull request compared with its base commit.
+  # The coverage command writes an istanbul json-summary report to
+  # coverage/coverage-summary.json. Skipped without commands.coverage.
+  coverage:
+    needs: config
+    if: github.event_name == 'pull_request' && needs.config.outputs.coverage != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GATE_INSTALL: ${{ needs.config.outputs.install }}
+      GATE_COMMAND: ${{ needs.config.outputs.coverage }}
+      GATE_TOLERANCE: ${{ needs.config.outputs.coverage_drop_tolerance }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workspace
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/gate-setup
+        with:
+          environment: ${{ needs.config.outputs.environment }}
+          install: ${{ needs.config.outputs.install }}
+      - name: Measure head coverage
+        working-directory: workspace
+        run: sh -c "$GATE_COMMAND"
+      # A base commit without tests or dependencies has no coverage.
+      - name: Measure base coverage
+        working-directory: workspace
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/base"
+          (sh -c "$GATE_INSTALL" && sh -c "$GATE_COMMAND") || echo "The base commit has no coverage."
+      - name: Compare coverage
+        run: >-
+          npm run --silent --prefix pipeline coverage-gate --
+          "$RUNNER_TEMP/base/coverage/coverage-summary.json"
+          "$GITHUB_WORKSPACE/workspace/coverage/coverage-summary.json"
+          "$GATE_TOLERANCE"
+
+  # QG-7.8 with the pipeline's jscpd; the repository's .jscpd.json may add
+  # ignored paths, but the threshold comes from the configuration.
+  duplication:
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workspace
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/gate-setup
+        with:
+          environment: ${{ needs.config.outputs.environment }}
+          dev-dependencies: "true"
+      - working-directory: workspace
+        env:
+          GATE_THRESHOLD: ${{ needs.config.outputs.max_duplication_percent }}
+        run: ../pipeline/node_modules/.bin/jscpd --threshold "$GATE_THRESHOLD" .
+
+  # QG-7.3
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl -sSfL -o "$archive" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Scan history for secrets
+        run: gitleaks git --redact --verbose
+
+  # The commit-msg hook again in CI (QG-7.12, QG-9.14), with the pipeline's
+  # rules: Conventional Commits with an issue reference (FR-4.9).
+  commitlint:
+    needs: config
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workspace
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/gate-setup
+        with:
+          environment: ${{ needs.config.outputs.environment }}
+          dev-dependencies: "true"
+      - working-directory: workspace
+        run: >-
+          ../pipeline/node_modules/.bin/commitlint
+          --config ../pipeline/commitlint.config.js
+          --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+
+  # QG-7.4
+  dependency-review:
+    needs: config
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: ${{ needs.config.outputs.dependency_scan_fail_on }}
+
+  # QG-7.2: CodeQL on the head commit, uploaded for code scanning, and on the
+  # base commit, only for the comparison in the sast job. The "gates" ruleset
+  # keeps its code_scanning rule at the baseline as a second layer.
+  sast-head:
+    name: sast-head (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(inputs.codeql-languages) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}
+          output: ${{ runner.temp }}/sarif
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-head-${{ matrix.language }}
+          path: ${{ runner.temp }}/sarif
+          retention-days: 1
+
+  sast-base:
+    name: sast-base (${{ matrix.language }})
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(inputs.codeql-languages) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BASE_SHA }}
+          persist-credentials: false
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}
+          output: ${{ runner.temp }}/sarif
+          upload: never
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sarif-base-${{ matrix.language }}
+          path: ${{ runner.temp }}/sarif
+          retention-days: 1
+
+  sast:
+    needs: [config, sast-head, sast-base]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
+          ref: ${{ inputs.pipeline-ref }}
+          path: pipeline
+          persist-credentials: false
+      - uses: ./pipeline/.github/actions/pipeline-setup
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: sarif-head-*
+          path: ${{ runner.temp }}/head
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: sarif-base-*
+          path: ${{ runner.temp }}/base
+      - env:
+          GATE_FAIL_ON: ${{ needs.config.outputs.sast_fail_on }}
+        run: >-
+          npm run --silent --prefix pipeline sast-gate --
+          "$RUNNER_TEMP/base" "$RUNNER_TEMP/head" "$GATE_FAIL_ON"

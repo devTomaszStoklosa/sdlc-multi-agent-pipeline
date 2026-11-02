@@ -29,6 +29,8 @@ async function handle(
     runner: new SandboxedCommandRunner(
       context.workspace,
       event.commandTimeoutMs,
+      false,
+      context.environment,
     ),
     installer: new SandboxedCommandRunner(
       context.workspace,

@@ -52,6 +52,20 @@ Skrypty:
 - `npm run session-summary -- --result <wynik.json> --audit <log.jsonl>`: podsumowanie sesji w Markdown bez transkryptu, z redakcją sekretów.
 - `npm run orchestrator -- <polecenie>`: kod jobów reusable workflows Orchestratora (`filter`, `scopes`, `decide`, `role`, `advance`, `target`, `cancel`, `wait-run`, `finalize`). Tokeny, zdarzenie i ścieżki czyta ze zmiennych środowiskowych GitHub Actions, a wyniki zapisuje jako outputy joba.
 - `npm run scope-gate`: bramka zakresu (QG-7.9) dla zdarzenia `pull_request` z GitHub Actions. Kod wyjścia 0 oznacza bramkę zaliczoną albo zdarzenie, którego nie dotyczy, 1 niezaliczoną, a 2 błąd.
+- `npm run gate-config -- <.sdlc-agents.yml>`: polecenia i progi bramek z konfiguracji scalonej z bazą organizacji, zapisane w pliku `GITHUB_OUTPUT`. Kody wyjścia jak w `validate-config`; brak pliku to konfiguracja niepoprawna.
+- `npm run coverage-gate -- <bazowy.json> <head.json> <tolerancja>`: porównanie pokrycia linii z raportów istanbul `json-summary` (QG-7.6). Brak raportu bazowego oznacza commit bez pokrycia.
+- `npm run sast-gate -- <katalog-bazowy> <katalog-head> <próg>`: nowe alerty bezpieczeństwa CodeQL z plików `.sarif` na progu lub wyżej (QG-7.2).
+
+## Bramki
+
+Repozytorium docelowe wywołuje reusable workflow [gates.yml](.github/workflows/gates.yml) z cienkiego workflow bramek, przypiętego pełnym SHA commita w `uses:` i w wejściu `pipeline-ref`. Job `config` czyta `.sdlc-agents.yml` z commitu bazowego PR, więc PR nie zmieni własnych poleceń ani progów. Pozostałe joby uruchamiają polecenia `commands.*` repozytorium oraz narzędzia pipeline'u: jscpd, gitleaks, commitlint, `dependency-review-action` i CodeQL z porównaniem z commitem bazowym. Każdy job jest wymaganym checkiem rulesetu bramek pod nazwą `<job wywołujący> / <job>` (rozdz. 3.6 planu), łącznie z `config` i jobami CodeQL `sast-head (<język>)` i `sast-base (<język>)`. Job pominięty po niezaliczonej zależności ma stan `skipped`, a wymagany check w tym stanie przechodzi, więc bez nich niepoprawna konfiguracja albo błąd CodeQL nie blokowałyby merge'u. Joby `build` i `coverage` są pomijane, gdy repozytorium nie ma polecenia.
+
+Kontrakt repozytorium:
+
+- `commands.format` przyjmuje ścieżki plików; bramka uruchamia je z `.` i wymaga, żeby nie zmieniło żadnego pliku.
+- Konfiguracja lintera czyta próg złożoności z `SDLC_MAX_FUNCTION_COMPLEXITY`, a `commands.lint` kończy się błędem przy znaleziskach na poziomie `SDLC_STATIC_ANALYSIS_FAIL_ON` lub wyższym. Te same zmienne dostają polecenia hooków agenta.
+- `commands.coverage` zapisuje raport istanbul `json-summary` w `coverage/coverage-summary.json`.
+- Job wywołujący `gates.yml` nadaje `contents: read` i `security-events: write`, bo CodeQL wysyła wyniki head do code scanning.
 
 ## Hooki agentów
 

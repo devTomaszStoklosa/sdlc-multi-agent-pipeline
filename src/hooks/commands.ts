@@ -67,16 +67,24 @@ export class SandboxedCommandRunner implements CommandRunner {
   private readonly workspace: string;
   private readonly timeoutMs: number;
   private readonly network: boolean;
+  // Variables added for the command, such as the gate thresholds.
+  private readonly environment: Readonly<Record<string, string>>;
 
-  constructor(workspace: string, timeoutMs: number, network = false) {
+  constructor(
+    workspace: string,
+    timeoutMs: number,
+    network = false,
+    environment: Readonly<Record<string, string>> = {},
+  ) {
     this.workspace = workspace;
     this.timeoutMs = timeoutMs;
     this.network = network;
+    this.environment = environment;
   }
 
   run(command: string, args: readonly string[]): Promise<CommandResult> {
     const options = {
-      env: sandboxEnvironment(process.env),
+      env: { ...sandboxEnvironment(process.env), ...this.environment },
       timeout: this.timeoutMs,
       maxBuffer: MAX_BUFFER,
     };

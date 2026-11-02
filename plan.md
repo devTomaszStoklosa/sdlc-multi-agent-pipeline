@@ -124,6 +124,7 @@ Dzięki temu zakazy z SEC-9.2, SEC-9.6, SEC-9.7 i SEC-9.8 są wymuszone struktur
 | `agents` | Adapter roli (ustrukturyzowane wejście i wyjście), implementacja na Claude Code CLI, role Planner, Developer i Reviewer, model roli z `prompts/roles.yml` | FR-5.1, FR-5.5, FR-5.8 |
 | `git` | Przestrzeń robocza Developera z punktu widzenia joba: interfejs `RunWorkspace` z implementacją na własnym katalogu gita joba poza przestrzenią roboczą i implementacją w pamięci do testów. Checkout brancha przebiegu, scalenie `main`, commit, diff PR, push. | FR-4.7, FR-4.9, FR-4.28b |
 | `gates/scope` | Deterministyczna bramka zakresu uruchamiana w CI repozytorium demo | QG-7.9 |
+| `gates/config`, `gates/line-coverage`, `gates/sast` | Polecenia i progi bramek z `.sdlc-agents.yml` commitu bazowego, porównanie pokrycia i alertów SAST z commitem bazowym (rozdz. 3.6) | QG-7.1, QG-7.2, QG-7.4 do QG-7.8, FR-10.2 |
 | `audit` | Zdarzenia jako JSONL, zużycie tokenów i szacunek kosztu z wyniku CLI, liczniki limitów | NFR-11.3, NFR-11.4, NFR-11.5 |
 | `orchestrator` | Kod jobów workflow: filtr zdarzeń, `decide`, job roli, `advance`, sprawdzenie przed skutkiem ubocznym, zatrzymanie i zakończenie przebiegu z podsumowaniem, CLI. Łączy pozostałe moduły i sam nie ma logiki przejść. | FR-4.1, FR-4.23, FR-4.28 do FR-4.35, SEC-9.8a |
 
@@ -184,20 +185,27 @@ flowchart LR
 
 ### 3.6 Bramki w repozytorium demo
 
-| Bramka | Narzędzie |
-|---|---|
-| QG-7.1 Analiza statyczna | ESLint, poziom `error` |
-| QG-7.2 SAST | CodeQL |
-| QG-7.3 Skanowanie sekretów | gitleaks |
-| QG-7.4 Skanowanie zależności | `actions/dependency-review-action`, próg `high` |
-| QG-7.5 Testy | Vitest |
-| QG-7.6 Pokrycie | Vitest z pokryciem porównywanym z `main`, tolerancja 0 |
-| QG-7.7 Złożoność | Reguła ESLint `complexity`, próg 10 |
-| QG-7.8 Duplikacja | jscpd, próg 3% |
-| QG-7.9 Zakres | `gates/scope` z tego repozytorium |
-| QG-9.13, QG-9.14 Hooki gita | lefthook (formatter, linter, gitleaks) i commitlint |
+Bramki działają w reusable workflow [gates.yml](.github/workflows/gates.yml) tego repozytorium, który repozytorium docelowe wywołuje cienkim workflow przypiętym pełnym SHA, tak jak `orchestrate.yml` (#67). Narzędzia niezależne od stacku uruchamia sam pipeline. Bramki zależne od stacku uruchamiają polecenia z `commands.*` repozytorium.
 
-Workflow bramek w MVP nie czyta `.sdlc-agents.yml`. Progi bramek są stałe i równe sekcji `gates` z `config/org-baseline.yml`, a polecenia lintera, testów i pokrycia są wpisane w workflow, zamiast pochodzić z `commands.lint`, `commands.test` i `commands.coverage`. Dlatego ani zaostrzenie progu, ani zmiana polecenia w konfiguracji repozytorium nie mają w MVP skutku w CI (rozdz. 8). Zmianę `gates` w bazie organizacji autor przenosi ręcznie do workflow bramek repozytorium demo, w PR przepinającym pipeline na nowszy commit.
+| Bramka | Narzędzie | Próg |
+|---|---|---|
+| QG-7.1 Analiza statyczna | `commands.lint` (w repozytorium demo ESLint) | `SDLC_STATIC_ANALYSIS_FAIL_ON` |
+| QG-7.2 SAST | CodeQL na head i na commicie bazowym, porównanie SARIF w `gates/sast` | `gates.sast_fail_on` |
+| QG-7.3 Skanowanie sekretów | gitleaks | — |
+| QG-7.4 Skanowanie zależności | `actions/dependency-review-action` | `gates.dependency_scan_fail_on` |
+| QG-7.5 Testy | `commands.test` (Vitest) | — |
+| QG-7.6 Pokrycie | `commands.coverage` na head i na commicie bazowym, porównanie raportów istanbul `coverage/coverage-summary.json` w `gates/line-coverage` | `gates.coverage_drop_tolerance` |
+| QG-7.7 Złożoność | `commands.lint` (reguła ESLint `complexity`) | `SDLC_MAX_FUNCTION_COMPLEXITY` |
+| QG-7.8 Duplikacja | jscpd pipeline'u | `gates.max_duplication_percent` |
+| QG-7.9 Zakres | `gates/scope` z tego repozytorium | — |
+| Formatowanie i budowanie | `commands.format` na całym drzewie bez zmian w plikach, `commands.build`, gdy jest | — |
+| QG-9.13, QG-9.14 Hooki gita | lefthook (formatter, linter, gitleaks) w repozytorium i commitlint z regułami pipeline'u (FR-4.9) | — |
+
+Job `config` czyta `.sdlc-agents.yml` z commitu bazowego PR, a przy pushu na `main` z wypchniętego commitu, i scala go z bazą organizacji (`gates/config`). Polecenia i progi z brancha PR nie działają, więc PR nie podmieni własnych bramek. Każde uruchomienie bramek stosuje konfigurację z chwili uruchomienia, a nie kopię przebiegu (FR-10.5). Brak pliku albo plik niepoprawny kończy job błędem (FR-10.1), dlatego `.sdlc-agents.yml` trafia na `main` repozytorium przed workflow bramek. Polecenia przechodzą do kroków przez zmienne środowiskowe, a nie przez wyrażenia w `run`.
+
+Progów, które stosuje tylko narzędzie repozytorium, pipeline nie zna. Polecenia lintera i testów dostają je jako zmienne `SDLC_STATIC_ANALYSIS_FAIL_ON` i `SDLC_MAX_FUNCTION_COMPLEXITY` (`config/gate-environment.ts`), a konfiguracja narzędzia je czyta. Te same zmienne dostają polecenia hooków sesji agenta, więc hook i CI sprawdzają zmianę tak samo (QG-7.12). Że narzędzie naprawdę je czyta, pilnuje akceptacja człowieka: konfiguracja lintera to plik konfiguracji bramek, więc jej zmiana jest high-impact (QG-7.11).
+
+Bramka SAST porównuje alerty bezpieczeństwa po `partialFingerprints`, więc alert przesunięty do innej linii nie jest nowy. Ruleset bramek zostawia regułę `code_scanning` z progiem bazy organizacji jako drugą warstwę, a próg zaostrzony w konfiguracji działa w jobie `sast`. Języki CodeQL to wejście `codeql-languages` cienkiego workflow.
 
 Te same sprawdzenia działają w CI (QG-7.12). Ochronę `main` tworzą trzy rulesety (rozdz. 2.2, FR-6.3). Ruleset bramek wymaga wszystkich bramek i nie ma listy obejść. Ruleset approvalu wymaga approvalu code ownera, a ruleset review agenta check runa `agent-review`. Oba przy merge PR może obejść tylko administrator repozytorium, a obejście approvalu to odstępstwo z rozdz. 8. Tożsamości pipeline'u nie ma na żadnej liście obejść. Każdy wymagany check ma przypięte źródło, a joby bramek nie mają uprawnień `checks: write` ani `statuses: write` (QG-7.14).
 
@@ -348,7 +356,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | FR-6.5 | MVP | P2, P3 | Brak tokenu w sesji, hook SEC-9.8, App bez wyjątku od branch protection. |
 | FR-6.6 | MVP | P3 | Repozytorium demo nie ma środowisk staging ani produkcja. Wymóg recenzentów wraca przy pierwszym takim środowisku. |
 | FR-6.7 | MVP | P4 | Pipeline nie ma ścieżki, w której agent przyznaje wyjątek. |
-| QG-7.1, QG-7.2, QG-7.4, QG-7.5, QG-7.6, QG-7.7, QG-7.8 | Częściowo | P3, F6 | Narzędzia w rozdz. 3.6. Progi równe bazie organizacji i polecenia wpisane w workflow, bo `gates.*` i `commands.*` z `.sdlc-agents.yml` nie działają w CI do F6 (rozdz. 8). |
+| QG-7.1, QG-7.2, QG-7.4, QG-7.5, QG-7.6, QG-7.7, QG-7.8 | Częściowo | P3, F6 | Narzędzia, polecenia i progi z `.sdlc-agents.yml` commitu bazowego w rozdz. 3.6 (#67). Progi QG-7.1 i QG-7.7 stosuje narzędzie repozytorium ze zmiennych środowiskowych. Do sprawdzenia w repozytorium demo po przepięciu na `gates.yml`. |
 | QG-7.3 | MVP | P3 | Narzędzia w rozdz. 3.6. |
 | QG-7.9 | MVP | P6 | |
 | QG-7.10 | MVP | P7 | |
@@ -380,7 +388,7 @@ Status **MVP** oznacza wymaganie spełnione w MVP, **częściowo** oznacza speł
 | Wymagania | Status | Gdzie | Uwagi |
 |---|---|---|---|
 | FR-10.1 | MVP | P1, P4 | Schemat i CLI walidacji w P1, plik w repozytorium demo w P4. |
-| FR-10.2 | Częściowo | P1, F6 | Zaostrzenie `gates.*` przechodzi walidację, ale do F6 nie działa w CI (rozdz. 8). |
+| FR-10.2 | Częściowo | P1, F6 | Zaostrzenie `gates.*` przechodzi walidację i działa w CI przez job `config` workflow `gates.yml` (rozdz. 3.6, #67). Do sprawdzenia w repozytorium demo po przepięciu. |
 | FR-10.4 | MVP | P1, P4 | Schemat bez `labels.stop`; `stop.yml` nie czyta `.sdlc-agents.yml`. |
 | FR-10.5 | MVP | P1, P4 | Kopia konfiguracji w komentarzu ze stanem. Bramki w CI repozytorium demo jej nie używają i do F6 stosują progi z bazy organizacji oraz polecenia wpisane w workflow (rozdz. 8). |
 | NFR-11.1 | Odstępstwo | F5 | W MVP JSONL jako artefakt workflow. |
@@ -426,7 +434,6 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 | Approval code ownera z obejściem przez administratora (FR-6.3) | Autor jest jedynym człowiekiem i code ownerem repozytorium demo, a GitHub nie pozwala zatwierdzić własnego PR. Bez obejścia nie da się zmergować żadnego ręcznego PR autora, w tym PR z zawartością początkową w P3. Obejście przy merge zwalnia naraz ze wszystkich rulesetów, które administrator może obejść (rozdz. 12), więc obejście `agent-review` na PR agenta zwalnia też z approvalu. Bramki obowiązują zawsze, a każde obejście widać w historii rulesetów. | Przy drugim code ownerze, najpóźniej w pilotażu (F6) |
 | Kolejka bez automatycznego startu (spec 4.1, plan 1.2) | Przebieg czekający w `queued` startuje dopiero po ręcznym `workflow_dispatch` workflow `orchestrate.yml` z numerem issue, a pipeline pisze o tym w komentarzu w czekającym issue. Automatyczny start wymagałby, żeby `stop.yml` albo `pr-closed.yml` uruchamiał `orchestrate.yml` tokenem z `actions: write`, a spec 5 dopuszcza to uprawnienie tylko do anulowania runów. W MVP działa jeden przebieg naraz, a testowe issue autor uruchamia po jednym (P8). | Przy kilku przebiegach naraz albo przy własnym serwerze, razem z FR-4.36 |
 | Wyłącznik globalny jako procedura ręczna (FR-4.34) | W MVP działa jeden przebieg naraz w jednym repozytorium (rozdz. 1.2). `agent:ready` dodane przy wyłączonym `orchestrate.yml` nie jest zdejmowane ani komentowane, więc po ponownym włączeniu workflow trzeba je dodać jeszcze raz. | Przy kilku przebiegach naraz albo w F6 |
-| Workflow bramek nie czyta `.sdlc-agents.yml`: progi równe bazie organizacji, polecenia wpisane w workflow (QG-7.1, QG-7.2, QG-7.4 do QG-7.8, FR-10.2) | W MVP jest jedno repozytorium, a jego `.sdlc-agents.yml` autor pisze bez sekcji `gates` i z poleceniami workflow bramek w `commands.*` (P4), więc progi i polecenia z konfiguracji i tak byłyby takie same jak w workflow. Odczyt wymagałby w workflow bramek kodu pipeline'u i konfiguracji z `main`, bo polecenia z brancha PR pozwoliłyby PR podmienić własne testy. Zaostrzenie `gates.*` i zmiana `commands.*` przechodzą walidację (P1), ale nie działają w CI, a zmianę bazy organizacji autor przenosi do workflow bramek ręcznie (rozdz. 3.6). | F6, przed podłączeniem repozytorium pilotażowego |
 
 ---
 
