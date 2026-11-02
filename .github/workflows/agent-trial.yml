@@ -40,6 +40,27 @@ jobs:
     timeout-minutes: 30
     environment: agents
     steps:
+      # Outbound traffic only to the hosts of `npm run egress -- agent-trial.yml trial` (SEC-8.4).
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.anthropic.com:443
+            api.github.com:443
+            azure.archive.ubuntu.com:443
+            azure.archive.ubuntu.com:80
+            broker.actions.githubusercontent.com:443
+            esm.ubuntu.com:443
+            github.com:443
+            motd.ubuntu.com:443
+            packages.microsoft.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       # Session files stay outside the workspace, so the agent cannot change
       # its own hooks or the audit log. Claude Code keeps its configuration
       # there too, instead of in the home directory.

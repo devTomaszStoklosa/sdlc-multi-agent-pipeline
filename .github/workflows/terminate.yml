@@ -55,6 +55,21 @@ jobs:
     env:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/cancel.jsonl
     steps:
+      # Outbound traffic only to the hosts of `npm run egress -- terminate.yml cancel` (SEC-8.4).
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -98,6 +113,21 @@ jobs:
       SDLC_ARTIFACTS_DIR: ${{ github.workspace }}/cancelled-run
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/finalize.jsonl
     steps:
+      # Outbound traffic only to the hosts of `npm run egress -- terminate.yml finalize` (SEC-8.4).
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline

@@ -55,6 +55,7 @@ Skrypty:
 - `npm run gate-config -- <.sdlc-agents.yml>`: polecenia i progi bramek z konfiguracji scalonej z bazą organizacji, zapisane w pliku `GITHUB_OUTPUT`. Kody wyjścia jak w `validate-config`; brak pliku to konfiguracja niepoprawna.
 - `npm run coverage-gate -- <bazowy.json> <head.json> <tolerancja>`: porównanie pokrycia linii z raportów istanbul `json-summary` (QG-7.6). Brak raportu bazowego oznacza commit bez pokrycia.
 - `npm run sast-gate -- <katalog-bazowy> <katalog-head> <próg>`: nowe alerty bezpieczeństwa CodeQL z plików `.sarif` na progu lub wyżej (QG-7.2).
+- `npm run egress -- <plik-workflow> <job>`: lista `allowed-endpoints` harden-runnera dla joba, do wklejenia w workflow (SEC-8.4).
 
 ## Bramki
 
@@ -80,6 +81,21 @@ Hooki z rozdz. 9.2 specyfikacji są w [src/hooks](src/hooks). Claude Code urucha
 Polecenia projektu (formatter, linter, testy) hooki uruchamiają w [bubblewrap](https://github.com/containers/bubblewrap) bez sieci, bez widoku innych procesów i z zapisem tylko w przestrzeni roboczej, bo te polecenia wykonują kod zmieniany przez agenta (rozdz. 3.4 planu). Testy tej izolacji działają tylko na Linuksie z `bwrap`. Lokalnie są pomijane, a w CI (`REQUIRE_SANDBOX=1`) nie mogą być pominięte.
 
 Analiza poleceń powłoki to heurystyka: nie widzi zawartości uruchamianych skryptów ani nazw plików powstałych z rozwinięcia wzorców. Drugą warstwą jest sandbox Claude Code (SEC-9.0c).
+
+## Ruch wychodzący jobów
+
+Każdy job workflowów `orchestrate.yml`, `gates.yml`, `scope-gate.yml`, `terminate.yml` i `agent-trial.yml` zaczyna się od [harden-runnera](https://github.com/step-security/harden-runner) w trybie `block`, bez telemetrii (SEC-8.4, rozdz. 4 planu). Połączenie z hostem spoza listy joba kończy się błędem, a log post-stepu harden-runnera zawiera wpis `domain not allowed: <host>`.
+
+- Listy składa [src/config/egress.ts](src/config/egress.ts) z grup hostów zebranych w trybie `audit` (#68): GitHub dla każdego joba, rejestr npm pipeline'u, `network.allowed_hosts` z bazy organizacji dla jobów z poleceniami repozytorium i sesją agenta, Anthropic i apt tylko dla sesji agenta, Scorecard dla `dependency-review`.
+- Listy są wpisane w workflowach, żeby było je widać w review. Test `src/config/egress.test.ts` pilnuje, że są równe wynikowi modułu. Po zmianie grupy albo `network.allowed_hosts` listę joba wypisuje `npm run egress -- <plik-workflow> <job>`.
+- Repozytorium nie dodaje hostów (FR-10.2). Host potrzebny poleceniom repozytorium trafia do `network.allowed_hosts` bazy organizacji.
+- Job, który padł na blokadzie, ma w logu post-stepu harden-runnera wpis `domain not allowed`. Hosty pobierania akcji zmieniają się między wersjami, więc po aktualizacji akcji warto puścić jej joby w trybie `audit`.
+
+Ograniczenia:
+
+- Tryb `block` jest darmowy (tier Community) tylko dla repozytoriów publicznych na runnerach GitHuba. Repozytorium prywatne wymaga tieru Enterprise.
+- `*.blob.core.windows.net` przepuszcza każde konto Azure Storage, bo GitHub zapisuje logi i artefakty na kontach o zmiennych nazwach. To droga wyprowadzenia danych, której lista nie zamyka.
+- Harden-runner w wersji v2.22.2 odcinał dozwolone połączenia, gdy odpowiadał resolver DNS testowany przez GitHub na runnerach ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)). Workflowy używają v2.22.3 z poprawką.
 
 Próbną sesję na runnerze uruchamia reusable workflow [agent-trial.yml](.github/workflows/agent-trial.yml), wywoływany z ręcznego workflow na `main` repozytorium demo.
 
