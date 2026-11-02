@@ -58,7 +58,7 @@ Skrypty:
 
 ## Bramki
 
-Repozytorium docelowe wywołuje reusable workflow [gates.yml](.github/workflows/gates.yml) z cienkiego workflow bramek, przypiętego pełnym SHA commita w `uses:` i w wejściu `pipeline-ref`. Job `config` czyta `.sdlc-agents.yml` z commitu bazowego PR, więc PR nie zmieni własnych poleceń ani progów. Pozostałe joby uruchamiają polecenia `commands.*` repozytorium oraz narzędzia pipeline'u: jscpd, gitleaks, commitlint, `dependency-review-action` i CodeQL z porównaniem z commitem bazowym. Każdy job jest wymaganym checkiem rulesetu bramek pod nazwą `<job wywołujący> / <job>` (rozdz. 3.6 planu).
+Repozytorium docelowe wywołuje reusable workflow [gates.yml](.github/workflows/gates.yml) z cienkiego workflow bramek, przypiętego pełnym SHA commita w `uses:` i w wejściu `pipeline-ref`. Job `config` czyta `.sdlc-agents.yml` z commitu bazowego PR, więc PR nie zmieni własnych poleceń ani progów. Pozostałe joby uruchamiają polecenia `commands.*` repozytorium oraz narzędzia pipeline'u: jscpd, gitleaks, commitlint, `dependency-review-action` i CodeQL z porównaniem z commitem bazowym. Każdy job jest wymaganym checkiem rulesetu bramek pod nazwą `<job wywołujący> / <job>` (rozdz. 3.6 planu), łącznie z `config` i jobami CodeQL `sast-head (<język>)` i `sast-base (<język>)`. Job pominięty po niezaliczonej zależności ma stan `skipped`, a wymagany check w tym stanie przechodzi, więc bez nich niepoprawna konfiguracja albo błąd CodeQL nie blokowałyby merge'u. Joby `build` i `coverage` są pomijane, gdy repozytorium nie ma polecenia.
 
 Kontrakt repozytorium:
 

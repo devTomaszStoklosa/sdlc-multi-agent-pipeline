@@ -3,7 +3,9 @@ name: Gates
 # The quality gates (spec 7.1, QG-7.12), called from the gates workflow of a
 # connected repository on its pull_request events and pushes to main. Each job
 # is a required check of the repository's "gates" ruleset, named
-# `<caller job> / <job>`, so a renamed job must be renamed there too.
+# `<caller job> / <job>`, so a renamed job must be renamed there too. The
+# ruleset also requires `config` and the CodeQL jobs: a job skipped because a
+# job it needs failed is `skipped`, and a skipped required check passes.
 #
 # The config job reads .sdlc-agents.yml from the base commit of the pull
 # request and merges it with the organization baseline (FR-10.2). The other
@@ -245,7 +247,7 @@ jobs:
       - working-directory: workspace
         env:
           GATE_THRESHOLD: ${{ needs.config.outputs.max_duplication_percent }}
-        run: ../pipeline/node_modules/.bin/jscpd --gitignore --threshold "$GATE_THRESHOLD" .
+        run: ../pipeline/node_modules/.bin/jscpd --threshold "$GATE_THRESHOLD" .
 
   # QG-7.3
   secrets:
