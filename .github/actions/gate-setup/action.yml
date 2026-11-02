@@ -1,0 +1,40 @@
+name: Gate setup
+description: >-
+  The pipeline in the `pipeline` directory, the gate thresholds for the
+  repository's commands and the repository's dependencies in the `workspace`
+  directory, for a job of the gates workflow.
+
+inputs:
+  environment:
+    description: The gate thresholds as NAME=value lines, from the config job.
+    required: true
+  install:
+    description: The repository's install command; empty for a job that does not run its code.
+    required: false
+    default: ""
+  dev-dependencies:
+    description: Whether the job runs a development tool of the pipeline, such as jscpd.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: ./pipeline/.github/actions/pipeline-setup
+
+    - if: inputs.dev-dependencies == 'true'
+      run: npm ci --prefix pipeline --ignore-scripts --no-audit --no-fund
+      shell: bash
+
+    # The thresholds come from the config job, never from the pull request.
+    - env:
+        GATE_ENVIRONMENT: ${{ inputs.environment }}
+      run: printf '%s\n' "$GATE_ENVIRONMENT" >> "$GITHUB_ENV"
+      shell: bash
+
+    - if: inputs.install != ''
+      working-directory: workspace
+      env:
+        GATE_COMMAND: ${{ inputs.install }}
+      run: sh -c "$GATE_COMMAND"
+      shell: bash
