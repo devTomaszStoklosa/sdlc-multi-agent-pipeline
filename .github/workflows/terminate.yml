@@ -55,10 +55,21 @@ jobs:
     env:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/cancel.jsonl
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- terminate.yml cancel` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -102,10 +113,21 @@ jobs:
       SDLC_ARTIFACTS_DIR: ${{ github.workspace }}/cancelled-run
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/finalize.jsonl
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- terminate.yml finalize` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline

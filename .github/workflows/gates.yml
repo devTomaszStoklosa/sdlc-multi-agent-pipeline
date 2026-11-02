@@ -57,10 +57,21 @@ jobs:
       max_duplication_percent: ${{ steps.config.outputs.max_duplication_percent }}
       environment: ${{ steps.config.outputs.environment }}
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml config` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -83,10 +94,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml format` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -116,10 +138,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml lint` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -146,10 +179,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml build` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -175,10 +219,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml test` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -211,10 +266,21 @@ jobs:
       GATE_COMMAND: ${{ needs.config.outputs.coverage }}
       GATE_TOLERANCE: ${{ needs.config.outputs.coverage_drop_tolerance }}
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml coverage` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -254,10 +320,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml duplication` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -282,10 +359,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml secrets` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -308,10 +395,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml commitlint` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -340,10 +438,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml dependency-review` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            api.securityscorecards.dev:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: ${{ needs.config.outputs.dependency_scan_fail_on }}
@@ -363,10 +472,20 @@ jobs:
       matrix:
         language: ${{ fromJSON(inputs.codeql-languages) }}
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml sast-head` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -394,10 +513,20 @@ jobs:
       matrix:
         language: ${{ fromJSON(inputs.codeql-languages) }}
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml sast-base` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.BASE_SHA }}
@@ -423,10 +552,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- gates.yml sast` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline

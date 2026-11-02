@@ -68,10 +68,21 @@ jobs:
       proceed: ${{ steps.filter.outputs.proceed }}
       issue: ${{ steps.filter.outputs.issue }}
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml filter` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -103,10 +114,21 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/decide.jsonl
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml decide` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -160,10 +182,27 @@ jobs:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role.jsonl
       SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml role` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.anthropic.com:443
+            api.github.com:443
+            azure.archive.ubuntu.com:443
+            azure.archive.ubuntu.com:80
+            broker.actions.githubusercontent.com:443
+            esm.ubuntu.com:443
+            github.com:443
+            motd.ubuntu.com:443
+            packages.microsoft.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -244,10 +283,21 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance.jsonl
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml advance` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -301,10 +351,27 @@ jobs:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role-2.jsonl
       SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml role-2` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.anthropic.com:443
+            api.github.com:443
+            azure.archive.ubuntu.com:443
+            azure.archive.ubuntu.com:80
+            broker.actions.githubusercontent.com:443
+            esm.ubuntu.com:443
+            github.com:443
+            motd.ubuntu.com:443
+            packages.microsoft.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -381,10 +448,21 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance-2.jsonl
     steps:
-      # Spike of #68: record the outbound connections of the job.
+      # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml advance-2` (SEC-8.4).
       - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >-
+            *.blob.core.windows.net:443
+            *.githubapp.com:443
+            api.github.com:443
+            broker.actions.githubusercontent.com:443
+            github.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            uploads.github.com:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
