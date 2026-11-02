@@ -11,6 +11,7 @@ const resultSchema = z.looseObject({
   total_cost_usd: z.number().optional(),
   usage: z.record(z.string(), z.unknown()).optional(),
   result: z.string().optional(),
+  partial_usage: z.boolean().optional(),
 });
 
 const recordSchema = z.looseObject({
@@ -38,6 +39,12 @@ function sessionLines(result: SessionResult): string[] {
     `- Turns: ${String(result.num_turns ?? "unknown")}, duration: ${String(result.duration_ms ?? "unknown")} ms`,
     `- Estimated cost (usage measure, not a charge): ${String(result.total_cost_usd ?? "unknown")} USD`,
     `- Usage: ${JSON.stringify(result.usage ?? {})}`,
+    // An aborted session's usage comes from its stream (#61).
+    ...(result.partial_usage === true
+      ? [
+          "- Usage is partial: the session was aborted, output tokens are a lower bound",
+        ]
+      : []),
   ];
 }
 
