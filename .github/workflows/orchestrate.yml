@@ -69,7 +69,7 @@ jobs:
       issue: ${{ steps.filter.outputs.issue }}
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml filter` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -115,7 +115,7 @@ jobs:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/decide.jsonl
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml decide` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -183,7 +183,7 @@ jobs:
       SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml role` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -284,7 +284,7 @@ jobs:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance.jsonl
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml advance` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -352,7 +352,7 @@ jobs:
       SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml role-2` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -449,7 +449,7 @@ jobs:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance-2.jsonl
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- orchestrate.yml advance-2` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true

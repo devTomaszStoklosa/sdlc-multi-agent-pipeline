@@ -58,7 +58,7 @@ jobs:
       environment: ${{ steps.config.outputs.environment }}
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml config` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -95,7 +95,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml format` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -139,7 +139,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml lint` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -180,7 +180,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml build` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -220,7 +220,7 @@ jobs:
     timeout-minutes: 15
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml test` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -267,7 +267,7 @@ jobs:
       GATE_TOLERANCE: ${{ needs.config.outputs.coverage_drop_tolerance }}
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml coverage` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -321,7 +321,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml duplication` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -360,7 +360,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml secrets` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -396,7 +396,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml commitlint` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -439,7 +439,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml dependency-review` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -473,7 +473,7 @@ jobs:
         language: ${{ fromJSON(inputs.codeql-languages) }}
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml sast-head` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -514,7 +514,7 @@ jobs:
         language: ${{ fromJSON(inputs.codeql-languages) }}
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml sast-base` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
@@ -553,7 +553,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # Outbound traffic only to the hosts of `npm run egress -- gates.yml sast` (SEC-8.4).
-      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           disable-telemetry: true
