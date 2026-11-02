@@ -33,5 +33,9 @@ export function hookContext(role: Role = "developer"): HookContext {
       lint: "npx eslint --max-warnings=0",
       test: "npm test",
     },
+    environment: {
+      SDLC_STATIC_ANALYSIS_FAIL_ON: "error",
+      SDLC_MAX_FUNCTION_COMPLEXITY: "10",
+    },
   };
 }

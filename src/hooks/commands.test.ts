@@ -105,6 +105,16 @@ describe.runIf(sandboxAvailable)(
       });
     });
 
+    it("passes the added variables to the command", async () => {
+      const workspace = await mkdtemp(path.join(tmpdir(), "sandbox-ws-"));
+      const runner = new SandboxedCommandRunner(workspace, 30_000, false, {
+        SDLC_MAX_FUNCTION_COMPLEXITY: "8",
+      });
+      expect(
+        await runner.run('printf %s "$SDLC_MAX_FUNCTION_COMPLEXITY"', []),
+      ).toEqual({ ok: true, output: "8" });
+    });
+
     it("writes inside the workspace but not outside it", async () => {
       const { workspace, runner } = await setUp();
       // Outside /tmp, which the sandbox replaces, so the directory exists there.
