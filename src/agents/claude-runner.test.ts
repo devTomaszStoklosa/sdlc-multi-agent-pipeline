@@ -4,20 +4,39 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import { BASELINE, configText } from "../config/fixtures.ts";
+import type { ProcessRun } from "./claude-result.ts";
 import {
   ClaudeRoleRunner,
+  ProcessAbortedError,
+  spawnProcess,
   type ProcessSpec,
   type RoleSession,
 } from "./claude-runner.ts";
-import type { RoleInput } from "./role-runner.ts";
+import { SessionAbortedError, type RoleInput } from "./role-runner.ts";
 
 const TOKEN = "claude-token";
-const STDOUT = JSON.stringify({
+const RESULT = JSON.stringify({
+  type: "result",
   subtype: "success",
   is_error: false,
   num_turns: 2,
   structured_output: { plan: true },
 });
+// A stream with the session's thinking, which the session directory never
+// gets, and a system event after the result.
+const STDOUT = [
+  JSON.stringify({ type: "system", subtype: "init" }),
+  JSON.stringify({
+    type: "assistant",
+    message: { id: "m1", content: [{ type: "thinking", thinking: "secret" }] },
+  }),
+  RESULT,
+  JSON.stringify({ type: "system", subtype: "task_summary" }),
+  "",
+].join("\n");
+
+let processRun: (spec: ProcessSpec) => Promise<ProcessRun> = () =>
+  Promise.resolve({ exitCode: 0, stdout: STDOUT, stderr: "" });
 
 const session: RoleSession = {
   prompt: (input, instructions) =>
@@ -44,6 +63,8 @@ let calls: ProcessSpec[] = [];
 beforeEach(async () => {
   sessionsDir = await mkdtemp(path.join(tmpdir(), "claude-runner-"));
   calls = [];
+  processRun = () =>
+    Promise.resolve({ exitCode: 0, stdout: STDOUT, stderr: "" });
 });
 
 function runner(
@@ -60,7 +81,7 @@ function runner(
       Promise.resolve({ model: "claude-test", instructions: "Plan it." }),
     runProcess: (spec) => {
       calls.push(spec);
-      return Promise.resolve({ exitCode: 0, stdout: STDOUT, stderr: "" });
+      return processRun(spec);
     },
     parentEnv: {
       PATH: "/usr/bin",
@@ -91,7 +112,8 @@ describe("ClaudeRoleRunner", () => {
       "--max-turns",
       "30",
       "--output-format",
-      "json",
+      "stream-json",
+      "--verbose",
       "--json-schema",
       '{"type":"object"}',
       "--settings",
@@ -109,7 +131,47 @@ describe("ClaudeRoleRunner", () => {
     ]);
     expect(call?.input).toBe("Plan it. #12");
     expect(call?.cwd).toBe("/work/repo");
-    expect(await readFile(path.join(dir, "result.json"), "utf8")).toBe(STDOUT);
+    expect(await readFile(path.join(dir, "result.json"), "utf8")).toBe(RESULT);
+  });
+
+  it("reports the usage of an aborted session from its stream (#61)", async () => {
+    const message = (id: string, output: number) =>
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          id,
+          usage: {
+            input_tokens: 2,
+            cache_creation_input_tokens: 100,
+            cache_read_input_tokens: 1000,
+            output_tokens: output,
+          },
+        },
+      });
+    const stream = [message("m1", 1), message("m1", 5), message("m2", 7)];
+    processRun = () =>
+      Promise.reject(new ProcessAbortedError(stream.join("\n")));
+    const usage = {
+      input_tokens: 2204,
+      output_tokens: 12,
+      cost_usd: 0,
+      turns: 2,
+    };
+    const run = runner().run(input, new AbortController().signal);
+    await expect(run).rejects.toEqual(new SessionAbortedError(usage));
+    await expect(run).rejects.toMatchObject({ usage });
+    const summary = JSON.parse(
+      await readFile(
+        path.join(sessionsDir, "planner-2", "result.json"),
+        "utf8",
+      ),
+    ) as unknown;
+    expect(summary).toEqual({
+      subtype: "aborted",
+      num_turns: 2,
+      usage: { input_tokens: 2204, output_tokens: 12 },
+      partial_usage: true,
+    });
   });
 
   // Shell commands of the session run next to these directories in the
@@ -183,5 +245,27 @@ describe("ClaudeRoleRunner", () => {
       runner().run({ ...input, config: "version: 2" }, signal),
     ).rejects.toThrow("configuration copy is invalid");
     expect(calls).toEqual([]);
+  });
+});
+
+describe("spawnProcess", () => {
+  it("keeps the output of a process that the signal kills (#61)", async () => {
+    const controller = new AbortController();
+    const run = spawnProcess({
+      command: process.execPath,
+      args: [
+        "-e",
+        "process.stdout.write('event\\n'); setInterval(() => undefined, 1000);",
+      ],
+      input: "",
+      env: { PATH: process.env.PATH ?? "" },
+      cwd: tmpdir(),
+      signal: controller.signal,
+    });
+    setTimeout(() => {
+      controller.abort();
+    }, 1000);
+    await expect(run).rejects.toEqual(new ProcessAbortedError("event\n"));
+    await expect(run).rejects.toMatchObject({ stdout: "event\n" });
   });
 });

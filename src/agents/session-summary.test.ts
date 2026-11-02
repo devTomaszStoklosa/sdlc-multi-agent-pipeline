@@ -42,6 +42,20 @@ describe("summarize", () => {
     expect(summary).toContain("- Redactions in tool output: 1");
   });
 
+  it("marks the partial usage of an aborted session (#61)", () => {
+    const aborted = JSON.stringify({
+      subtype: "aborted",
+      num_turns: 2,
+      usage: { input_tokens: 2204, output_tokens: 12 },
+      partial_usage: true,
+    });
+    const summary = summarize(aborted, "");
+    expect(summary).toContain("- Result: aborted");
+    expect(summary).toContain("not a charge): unknown USD");
+    expect(summary).toContain("- Usage is partial");
+    expect(summarize(RESULT, AUDIT)).not.toContain("- Usage is partial");
+  });
+
   it("redacts the final message", () => {
     const summary = summarize(RESULT, AUDIT);
     expect(summary).toContain("Done. Step 2 printed [REDACTED].");

@@ -4,11 +4,19 @@ import path from "node:path";
 import type { OrgBaseline } from "../config/schema.ts";
 import { ROLE_TOOLS, type Role } from "../hooks/roles.ts";
 import { toRoleResult, type ProcessRun } from "./claude-result.ts";
-import type { RoleInput, RoleRunner } from "./role-runner.ts";
+import { abortedResult, partialUsage, resultEvent } from "./claude-stream.ts";
+import {
+  SessionAbortedError,
+  type RoleInput,
+  type RoleRunner,
+} from "./role-runner.ts";
 import type { RoleSettings } from "./roles-config.ts";
 import { writeSessionFiles } from "./session-files.ts";
 
 const MAX_STDERR = 4000;
+// How long an aborted process may take to exit after SIGTERM before it gets
+// SIGKILL, within the stop time of NFR-4.28d.
+const KILL_AFTER_MS = 5000;
 
 // The only variables of the job that reach the session, so no GitHub or
 // Actions token does (plan 3.2). The Claude token is set on its own.
@@ -26,7 +34,19 @@ export interface ProcessSpec {
 
 export type RunProcess = (spec: ProcessSpec) => Promise<ProcessRun>;
 
-// Runs a process to its end and rejects when the signal kills it.
+// A process that the signal killed, with what it wrote before it exited.
+export class ProcessAbortedError extends Error {
+  readonly stdout: string;
+
+  constructor(stdout: string) {
+    super("The process was aborted.");
+    this.name = "ProcessAbortedError";
+    this.stdout = stdout;
+  }
+}
+
+// Runs a process to its end. When the signal kills it, it waits for the
+// process to exit and rejects with its output so far (#61).
 export const spawnProcess: RunProcess = (spec) =>
   new Promise((resolve, reject) => {
     const child = spawn(spec.command, [...spec.args], {
@@ -43,9 +63,19 @@ export const spawnProcess: RunProcess = (spec) =>
     child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
       stderr = (stderr + chunk).slice(-MAX_STDERR);
     });
-    child.on("error", reject);
+    child.on("error", (error) => {
+      if (!spec.signal.aborted) reject(error);
+    });
+    spec.signal.addEventListener(
+      "abort",
+      () => {
+        setTimeout(() => child.kill("SIGKILL"), KILL_AFTER_MS).unref();
+      },
+      { once: true },
+    );
     child.on("close", (exitCode) => {
-      resolve({ exitCode, stdout: stdout.join(""), stderr });
+      if (spec.signal.aborted) reject(new ProcessAbortedError(stdout.join("")));
+      else resolve({ exitCode, stdout: stdout.join(""), stderr });
     });
     // A process that exits before reading its input reports that itself.
     child.stdin.on("error", () => undefined);
@@ -96,7 +126,8 @@ export function claudeArgs(given: Invocation): string[] {
     "--max-turns",
     String(given.maxTurns),
     "--output-format",
-    "json",
+    "stream-json",
+    "--verbose",
     "--json-schema",
     JSON.stringify(given.schema),
     "--settings",
@@ -145,7 +176,7 @@ export class ClaudeRoleRunner implements RoleRunner {
     }
     const configDir = path.join(dir, "claude-config");
     await mkdir(configDir, { recursive: true });
-    const run = await options.runProcess({
+    const run = await this.runProcess(dir, {
       command: "claude",
       args: claudeArgs({
         model: settings.model,
@@ -159,9 +190,25 @@ export class ClaudeRoleRunner implements RoleRunner {
       cwd: options.workspace,
       signal,
     });
-    // For the session summary of the job; never a transcript (plan 4).
-    await writeFile(path.join(dir, "result.json"), run.stdout);
     return toRoleResult(run, (structured) => session.toOutput(structured));
+  }
+
+  // The process of a session. Only its result reaches the session directory,
+  // for the summary of the job; never the stream, a near transcript (plan 4).
+  // An aborted session reports the usage of its stream (#61).
+  private async runProcess(dir: string, spec: ProcessSpec) {
+    const resultFile = path.join(dir, "result.json");
+    try {
+      const run = await this.options.runProcess(spec);
+      const result = resultEvent(run.stdout);
+      await writeFile(resultFile, result ? JSON.stringify(result) : "");
+      return run;
+    } catch (error) {
+      if (!(error instanceof ProcessAbortedError)) throw error;
+      const usage = partialUsage(error.stdout);
+      await writeFile(resultFile, JSON.stringify(abortedResult(usage)));
+      throw new SessionAbortedError(usage);
+    }
   }
 
   private env(configDir: string): Record<string, string> {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { redactText } from "../hooks/redact.ts";
+import { resultEvent } from "./claude-stream.ts";
 import type { RoleFailure, RoleUsage } from "./role-runner.ts";
 
 const MAX_MESSAGE = 500;
@@ -12,8 +13,8 @@ export interface ProcessRun {
 
 const tokens = z.number().min(0).optional();
 
-// The result of `claude -p --output-format json`. Only the fields the job
-// uses are checked; the CLI may add others.
+// The result event of `claude -p --output-format stream-json`. Only the
+// fields the job uses are checked; the CLI may add others.
 const cliResultSchema = z.looseObject({
   subtype: z.string().optional(),
   is_error: z.boolean().optional(),
@@ -64,12 +65,8 @@ function message(text: string): string {
 }
 
 function parse(stdout: string): CliResult | undefined {
-  try {
-    const parsed = cliResultSchema.safeParse(JSON.parse(stdout.trim()));
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
+  const parsed = cliResultSchema.safeParse(resultEvent(stdout));
+  return parsed.success ? parsed.data : undefined;
 }
 
 function failed(

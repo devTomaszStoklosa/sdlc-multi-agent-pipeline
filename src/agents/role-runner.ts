@@ -78,6 +78,18 @@ export type RoleOutput = Extract<RoleResult, { status: "ok" }>["output"];
 export type RoleUsage = RoleResult["usage"];
 export type RoleFailure = (typeof ROLE_FAILURES)[number];
 
+// A session that the signal ended before its result, with the usage known so
+// far (#61). An adapter that knows none rejects with any other error.
+export class SessionAbortedError extends Error {
+  readonly usage: RoleUsage;
+
+  constructor(usage: RoleUsage) {
+    super("The session was aborted.");
+    this.name = "SessionAbortedError";
+    this.usage = usage;
+  }
+}
+
 // The adapter of a role (spec 13.4). The result is unvalidated, as it comes
 // from the session.
 export interface RoleRunner {

@@ -1,16 +1,9 @@
 import type { RoleBrief } from "../agents/brief.ts";
-import {
-  roleResultSchema,
-  type RoleInput,
-  type RoleResult,
-  type RoleRunner,
-  type RoleUsage,
-} from "../agents/role-runner.ts";
+import type { RoleRunner } from "../agents/role-runner.ts";
 import type { Run, RunRecord } from "../core/run-store/run-record.ts";
 import { roleOf } from "../core/state-machine/states.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
 import type { CommandRunner } from "../hooks/commands.ts";
-import { redactText } from "../hooks/redact.ts";
 import type { Role } from "../hooks/roles.ts";
 import { guardFor, type JobContext } from "./context.ts";
 import { developerBrief } from "./developer-brief.ts";
@@ -27,6 +20,7 @@ import {
 } from "./role-effects.ts";
 import type { RoleJobOutput, RoleOutcome } from "./role-output.ts";
 import { watchForStop, type Wait } from "./stop-watch.ts";
+import { NO_USAGE, session, type Session } from "./stage-session.ts";
 
 export interface RoleJobContext extends JobContext {
   runner: RoleRunner;
@@ -92,106 +86,6 @@ const BRIEFS: Record<Role, Brief> = {
       record,
     ),
 };
-
-const RETRYABLE = new Set(["infra", "usage-limit"]);
-const NO_USAGE: RoleUsage = {
-  input_tokens: 0,
-  output_tokens: 0,
-  cost_usd: 0,
-  turns: 0,
-};
-
-function addUsage(total: RoleUsage, more: RoleUsage): RoleUsage {
-  return {
-    input_tokens: total.input_tokens + more.input_tokens,
-    output_tokens: total.output_tokens + more.output_tokens,
-    cost_usd: total.cost_usd + more.cost_usd,
-    turns: total.turns + more.turns,
-  };
-}
-
-type Session =
-  | { timedOut: false; result: RoleResult; attempts: number; usage: RoleUsage }
-  | { timedOut: true; attempts: number; usage: RoleUsage };
-
-async function attempt(
-  runner: RoleRunner,
-  input: RoleInput,
-  signal: AbortSignal,
-): Promise<RoleResult | "timed-out"> {
-  try {
-    const parsed = roleResultSchema.safeParse(await runner.run(input, signal));
-    if (parsed.success) return parsed.data;
-    return {
-      status: "failed",
-      failure: "infra",
-      message: "Invalid session result",
-      usage: NO_USAGE,
-    };
-  } catch (error) {
-    // A stop ends the job without side effects; the time limit escalates.
-    if (signal.reason instanceof RunInactiveError) throw signal.reason;
-    if (signal.aborted) return "timed-out";
-    // The message reaches the job's log and the run events, which are public.
-    const text = error instanceof Error ? error.message : String(error);
-    const message = redactText(text).value;
-    return { status: "failed", failure: "infra", message, usage: NO_USAGE };
-  }
-}
-
-interface SessionLimits {
-  retries: number;
-  minutes: number;
-  stop: AbortSignal;
-}
-
-// One stage: the session and its retries after infrastructure errors, within
-// the run's remaining time (FR-4.30, NFR-11.5), until a stop. The timeout
-// takes whole milliseconds, rounded down so the session stays within the limit.
-async function session(
-  context: RoleJobContext,
-  input: Omit<RoleInput, "attempt">,
-  limits: SessionLimits,
-): Promise<Session> {
-  const signal = AbortSignal.any([
-    AbortSignal.timeout(Math.max(1, Math.floor(limits.minutes * 60_000))),
-    limits.stop,
-  ]);
-  let usage = NO_USAGE;
-  for (let attempts = 1; ; attempts++) {
-    const result = await attempt(
-      context.runner,
-      { ...input, attempt: attempts },
-      signal,
-    );
-    if (result === "timed-out") return { timedOut: true, attempts, usage };
-    usage = addUsage(usage, result.usage);
-    await context.log.append({
-      time: context.now().toISOString(),
-      type: "stage-attempt",
-      issue: input.issue.number,
-      run: input.runId,
-      agent: input.role,
-      workflow_run: context.workflowRunId,
-      result: result.status === "ok" ? "ok" : result.failure,
-      round: input.reviewRound,
-      tokens: {
-        input: result.usage.input_tokens,
-        output: result.usage.output_tokens,
-      },
-      cost_usd: result.usage.cost_usd,
-      // The cause of a failed attempt, so the role job's own events explain
-      // it (NFR-11.3).
-      details:
-        result.status === "ok"
-          ? { attempt: attempts }
-          : { attempt: attempts, message: result.message },
-    });
-    const retry = result.status === "failed" && RETRYABLE.has(result.failure);
-    if (!retry || attempts > limits.retries)
-      return { timedOut: false, result, attempts, usage };
-  }
-}
 
 function owns(run: Run, role: Role, workflowRunId: number): boolean {
   return (

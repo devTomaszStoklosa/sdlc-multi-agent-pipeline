@@ -25,6 +25,23 @@ function cli(fields: Record<string, unknown>, exitCode = 0) {
 const wrap = (structured: unknown) => ({ role: "planner", plan: structured });
 
 describe("toRoleResult", () => {
+  it("reads the last result event of a stream", () => {
+    const result = cli({ subtype: "success", structured_output: { a: 1 } });
+    const stream = {
+      ...result,
+      stdout: [
+        JSON.stringify({ type: "assistant", message: { id: "m1" } }),
+        result.stdout,
+        JSON.stringify({ type: "system", subtype: "task_summary" }),
+        "",
+      ].join("\n"),
+    };
+    expect(toRoleResult(stream, wrap)).toMatchObject({
+      status: "ok",
+      output: { role: "planner", plan: { a: 1 } },
+    });
+  });
+
   it("turns the structured output into the role output with its usage", () => {
     const result = toRoleResult(
       cli({ subtype: "success", is_error: false, structured_output: { a: 1 } }),
