@@ -70,11 +70,11 @@ Pobrane zostały logi i artefakty wszystkich 145 zakończonych runów repozytori
 
 ## 7. Pozostałe ustalenia
 
-Problemy poza zakresem P8:
+Problemy poza zakresem P8, każdy z ticketem:
 
 - [#58](https://github.com/devTomaszStoklosa/sdlc-multi-agent-pipeline/issues/58): plan ze zmianą manifestu przy braku `commands.update_lockfile` kończy się mylącą eskalacją „infrastrukturalną” zamiast wykrycia przed sesją.
-- Sesja Developera, która nie zmieniła żadnego pliku, liczy się jako błąd infrastruktury i zużywa ponowienia (`src/orchestrator/developer-effects.ts:194`). W C po powrocie z bramki tak skończyła się sesja, która działała poprawnie, bo jedyną możliwą poprawką był komunikat commita.
-- Zużycie sesji przerwanej przez `agent:stop` jest nieznane (`Usage: {}`) i nie wchodzi do limitu kosztu (B).
+- [#60](https://github.com/devTomaszStoklosa/sdlc-multi-agent-pipeline/issues/60): sesja Developera, która nie zmieniła żadnego pliku, liczy się jako błąd infrastruktury i zużywa ponowienia (`src/orchestrator/developer-effects.ts:194`). W C po powrocie z bramki tak skończyła się sesja, która działała poprawnie, bo jedyną możliwą poprawką był komunikat commita.
+- [#61](https://github.com/devTomaszStoklosa/sdlc-multi-agent-pipeline/issues/61): zużycie sesji przerwanej przez `agent:stop` jest nieznane (`Usage: {}`) i nie wchodzi do limitu kosztu (B).
 
 Obserwacje bez ticketu:
 
