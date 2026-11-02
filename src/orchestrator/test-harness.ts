@@ -28,6 +28,7 @@ commands:
   test: npm test
   lint: npm run lint
   format: npx prettier --write --ignore-unknown
+  update_lockfile: npm install --ignore-scripts
 `;
 
 export class Harness {

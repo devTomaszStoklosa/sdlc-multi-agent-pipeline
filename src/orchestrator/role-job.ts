@@ -278,7 +278,7 @@ async function work(
       runId: run.id,
       attempts: 1,
       usage: NO_USAGE,
-      outcome: { kind: "failed", failure: "infra", message: error.message },
+      outcome: error.outcome(),
     };
   }
   const scope: EffectScope = {

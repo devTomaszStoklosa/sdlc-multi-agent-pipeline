@@ -38,6 +38,8 @@ function reasonText(reason: EscalationReason): string {
           "etap zawiódł z przyczyn infrastrukturalnych po wyczerpaniu ponowień",
         "no-changes":
           "sesja Developera nie zmieniła żadnego pliku, więc nie było czego wypchnąć (szczegóły w podsumowaniu sesji w logu joba Developera)",
+        "missing-update-lockfile":
+          "plan zmienia manifest zależności, a `.sdlc-agents.yml` przebiegu nie ma `commands.update_lockfile`, więc lockfile zostałby niezgodny z manifestem. Przebieg używa kopii konfiguracji ze startu (FR-10.5): dodaj polecenie (np. `npm install --ignore-scripts`) na `main`, zatrzymaj ten przebieg i uruchom nowy (FR-4.28b)",
       }[reason.failure];
     case "limit":
       return {
