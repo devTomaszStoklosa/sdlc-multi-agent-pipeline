@@ -68,6 +68,10 @@ jobs:
       proceed: ${{ steps.filter.outputs.proceed }}
       issue: ${{ steps.filter.outputs.issue }}
     steps:
+      # Spike of #68: record the outbound connections of the job.
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -99,6 +103,10 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/decide.jsonl
     steps:
+      # Spike of #68: record the outbound connections of the job.
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -152,6 +160,10 @@ jobs:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role.jsonl
       SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
+      # Spike of #68: record the outbound connections of the job.
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -232,6 +244,10 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance.jsonl
     steps:
+      # Spike of #68: record the outbound connections of the job.
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -285,6 +301,10 @@ jobs:
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/role-2.jsonl
       SDLC_WORKSPACE: ${{ github.workspace }}/workspace
     steps:
+      # Spike of #68: record the outbound connections of the job.
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
@@ -361,6 +381,10 @@ jobs:
       ISSUE: ${{ needs.filter.outputs.issue }}
       SDLC_EVENTS_FILE: ${{ github.workspace }}/run-events/advance-2.jsonl
     steps:
+      # Spike of #68: record the outbound connections of the job.
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devTomaszStoklosa/sdlc-multi-agent-pipeline
