@@ -81,3 +81,19 @@ Obserwacje bez ticketu:
 - Po wznowieniu z `needs-human` w stanie `reviewing` runda review zaczyna się od 1 (FR-4.32), więc PR może mieć dwa review oznaczone „runda 1” (A). Zachowanie zgodne ze specyfikacją, ale mylące w historii PR.
 - Eskalacja powtórzonego znaleziska, które człowiek uznaje za zamierzony wyjątek, wraca po każdym wznowieniu, bo MVP nie ma obsługi komentarzy człowieka (F2). Jedyne wyjścia to `agent:stop` albo merge z obejściem.
 - Przy PR autora repozytorium demo merge zawsze wymaga obejścia (rozdz. 8 planu). Przy PR agenta wystarcza approval autora, co potwierdził C2. W B merge poszedł omyłkowo obejściem.
+
+## 8. Sprawdzenie poprawek ustaleń
+
+**Data:** 2026-11-02
+**Ticket:** [#65](https://github.com/devTomaszStoklosa/sdlc-multi-agent-pipeline/issues/65)
+
+Ustalenia z rozdz. 7 z ticketami naprawiły [#62](https://github.com/devTomaszStoklosa/sdlc-multi-agent-pipeline/pull/62) (#60), [#63](https://github.com/devTomaszStoklosa/sdlc-multi-agent-pipeline/pull/63) (#58) i [#64](https://github.com/devTomaszStoklosa/sdlc-multi-agent-pipeline/pull/64) (#61). Każda poprawka ma testy jednostkowe. Cienkie workflow repozytorium demo zostały przepięte na commit merge'a `982332c` ([sandbox#55](https://github.com/devTomaszStoklosa/sdlc-pipeline-sandbox/pull/55)). Poprawka #61 przeszła na `stream-json`, więc oba testy w repozytorium demo sprawdzały runner z prawdziwymi sesjami.
+
+| Test | Issue / PR | Scenariusz | Wynik |
+|---|---|---|---|
+| R | [sandbox#56](https://github.com/devTomaszStoklosa/sdlc-pipeline-sandbox/issues/56) / [#57](https://github.com/devTomaszStoklosa/sdlc-pipeline-sandbox/pull/57) | Zwykły przebieg na `stream-json` | `awaiting-human-review` bez ingerencji. Podsumowania trzech sesji z `Result: success` i szacunkiem 0,08–0,11 USD, więc wynik i `structured_output` są czytane ze strumienia. PR zamknięty bez merge'a, przebieg `done`. |
+| S | [sandbox#58](https://github.com/devTomaszStoklosa/sdlc-pipeline-sandbox/issues/58) | `agent:stop` w trakcie sesji Developera | Etykieta ok. 66 s po starcie kroku roli. Stop wykryty po 8 s, job zakończony 14 s po etykiecie. Podsumowanie sesji: `Result: aborted`, 4 tury, 77 131 tokenów wejścia i 58 wyjścia (dolna granica), koszt nieznany. Zdarzenie `stage-attempt` z wynikiem `stopped`, `partial: true` i bez `cost_usd`. |
+
+Test S potwierdził na runnerze Linux to, czego spike z #61 nie sprawdził lokalnie: proces przerwany sygnałem zostawia w stdout zdarzenia strumienia do chwili zatrzymania. Podsumowanie zatrzymania nadal pokazuje tylko zużycie zapisane w stanie (0,06 USD Plannera), bo zatrzymany przebieg nie zapisuje stanu (FR-4.28c). Zużycie przerwanej sesji jest w podsumowaniu sesji i w logu zdarzeń.
+
+Limitu czasu (#61), braku `update_lockfile` (#58) ani sesji bez zmian (#60) repozytorium demo nie sprawdzało. Dwa pierwsze wymagają zmiany `.sdlc-agents.yml` na `main` repozytorium demo, a trzeciego nie da się wiarygodnie wymusić prawdziwą sesją. Pokrywają je testy jednostkowe w `stage-session.test.ts` i `developer.test.ts`.
