@@ -3,7 +3,9 @@ import type { ActiveState, RunStateName } from "./states.ts";
 export const LIMITS = ["time", "cost", "turns"] as const;
 export type LimitName = (typeof LIMITS)[number];
 
-export const STAGE_FAILURES = ["infra", "usage-limit"] as const;
+// A Developer session that changed no file is not retried: a new session
+// with the same brief would change nothing either (#60).
+export const STAGE_FAILURES = ["infra", "usage-limit", "no-changes"] as const;
 export type StageFailure = (typeof STAGE_FAILURES)[number];
 
 // What happened to a run, after the orchestrator code checked who caused it

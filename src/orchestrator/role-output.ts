@@ -39,7 +39,7 @@ const outcomeSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     kind: z.literal("failed"),
-    failure: z.enum([...ROLE_FAILURES, "time"]),
+    failure: z.enum([...ROLE_FAILURES, "time", "no-changes"]),
     message: z.string(),
     resetsAt: z.string().optional(),
   }),

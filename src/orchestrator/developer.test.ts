@@ -245,4 +245,15 @@ describe("a Developer stage", () => {
     expect(repo.workspace.pushes).toEqual([]);
     expect(repo.github.drafts).toEqual([]);
   });
+
+  it("escalates a session that changed nothing as such, not as infrastructure (#60)", async () => {
+    const { repo, developer } = harness();
+    repo.workspace.changed = false;
+    await repo.label(1, "agent:ready");
+    expect(developer.inputs).toHaveLength(1);
+    expect((await repo.run(1)).progress.resumeState).toBe("developing");
+    const escalation = repo.comments(1).at(-1);
+    expect(escalation).toContain("sesja Developera nie zmieniła żadnego pliku");
+    expect(escalation).not.toContain("infrastrukturalnych");
+  });
 });

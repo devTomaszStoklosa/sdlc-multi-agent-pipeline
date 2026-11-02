@@ -25,9 +25,14 @@ const MAX_CHANGED_FILES = 200;
 
 type Failure = Extract<RoleOutcome, { kind: "failed" }>;
 
-function failed(message: string): Failure {
-  return { kind: "failed", failure: "infra", message };
+function failed(
+  message: string,
+  failure: Failure["failure"] = "infra",
+): Failure {
+  return { kind: "failed", failure, message };
 }
+
+const NO_CHANGES = "The Developer session changed no file.";
 
 interface DeveloperScope extends EffectScope {
   workspace: RunWorkspace;
@@ -177,21 +182,22 @@ async function pullRequest(
 
 // Commits the session's work, or says why there is nothing to push. Replies
 // alone to the review of the pushed commit get an empty commit, whose push
-// runs the gates and the next review round (FR-4.15).
+// runs the gates and the next review round (FR-4.15). A session that changed
+// no file is not an infrastructure error (#60).
 async function commitWork(
   scope: DeveloperScope,
   message: string,
   replied: boolean,
-): Promise<string | undefined> {
+): Promise<Failure | undefined> {
   const { workspace, brief, run } = scope;
   const unresolved = await workspace.unresolved(brief.conflicts);
   if (unresolved.length > 0) {
-    return `Conflict markers remain in: ${unresolved.join(", ")}`;
+    return failed(`Conflict markers remain in: ${unresolved.join(", ")}`);
   }
   const answersOnly = replied && brief.review?.sha === run.progress.pushedSha;
   return (await workspace.commit(message, answersOnly))
     ? undefined
-    : "The Developer session changed no file.";
+    : failed(NO_CHANGES, "no-changes");
 }
 
 // The side effects of a Developer stage (plan 3.2): the job commits the
@@ -207,7 +213,7 @@ export async function developerEffects(
   const message = commitMessage(work.commit, issue.number);
   const replies = openFindingReplies(scope.brief, work.replies);
   const problem = await commitWork(scope, message, replies.length > 0);
-  if (problem !== undefined) return failed(problem);
+  if (problem !== undefined) return problem;
   const main = await context.app.contents.defaultBranch();
   const diff = await workspace.diff(main.name);
   const denied = diffProblem(

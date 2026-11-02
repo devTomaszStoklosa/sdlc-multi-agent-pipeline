@@ -32,9 +32,13 @@ function reasonText(reason: EscalationReason): string {
     case "repeated-finding":
       return `to samo znalezisko blokujące zgłoszono drugi raz: ${reason.findings.join(", ")}`;
     case "stage-failed":
-      return reason.failure === "usage-limit"
-        ? `osiągnięto limit planu Claude Pro, który odnowi się ${reason.resetsAt ?? "w nieznanym czasie"}`
-        : "etap zawiódł z przyczyn infrastrukturalnych po wyczerpaniu ponowień";
+      return {
+        "usage-limit": `osiągnięto limit planu Claude Pro, który odnowi się ${reason.resetsAt ?? "w nieznanym czasie"}`,
+        infra:
+          "etap zawiódł z przyczyn infrastrukturalnych po wyczerpaniu ponowień",
+        "no-changes":
+          "sesja Developera nie zmieniła żadnego pliku, więc nie było czego wypchnąć (szczegóły w podsumowaniu sesji w logu joba Developera)",
+      }[reason.failure];
     case "limit":
       return {
         time: "osiągnięto limit czasu przebiegu",
