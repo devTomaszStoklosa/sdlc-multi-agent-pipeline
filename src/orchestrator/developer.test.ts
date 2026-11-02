@@ -8,7 +8,7 @@ import type {
   RoleRunner,
 } from "../agents/role-runner.ts";
 import { StubRoleRunner } from "../agents/stub-role.ts";
-import { Harness } from "./test-harness.ts";
+import { CONFIG, Harness } from "./test-harness.ts";
 
 const USAGE = { input_tokens: 1, output_tokens: 1, cost_usd: 0, turns: 1 };
 
@@ -197,6 +197,33 @@ describe("a Developer stage", () => {
     await repo.label(1, "agent:ready");
     await repo.gates(1, "failure");
     expect(repo.installs).toEqual(["npm ci", "npm ci"]);
+  });
+
+  it("escalates a plan with a manifest and no update_lockfile before the session (#58)", async () => {
+    const { repo, developer } = harness(
+      aWork({
+        planUpdate: {
+          reason: "Potrzebna nowa zależność.",
+          files: [
+            { path: "package.json", change: "modify", why: "Zależność." },
+          ],
+          highImpact: { value: true, reasons: ["Nowa zależność."] },
+        },
+      }),
+      aWork(),
+    );
+    repo.setConfig(CONFIG.replace(/^ {2}update_lockfile: .*\n/m, ""));
+    await repo.label(1, "agent:ready");
+    expect(await repo.state(1)).toBe("awaiting-plan-approval");
+    await repo.label(1, "plan:approved");
+    expect(await repo.state(1)).toBe("needs-human");
+    expect(developer.inputs).toHaveLength(1);
+    expect(repo.installs).toEqual(["npm ci"]);
+    expect(repo.workspace.prepared).toHaveLength(1);
+    expect(repo.workspace.pushes).toEqual([]);
+    const escalation = repo.comments(1).at(-1);
+    expect(escalation).toContain("nie ma `commands.update_lockfile`");
+    expect(escalation).not.toContain("infrastrukturalnych");
   });
 
   it("escalates a failed install without a session", async () => {

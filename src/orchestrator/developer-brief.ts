@@ -1,4 +1,5 @@
 import type { DeveloperBrief, GateFailure } from "../agents/developer/brief.ts";
+import { planManifests } from "../agents/developer/manifests.ts";
 import type { OrgBaseline } from "../config/schema.ts";
 import type { RunRecord } from "../core/run-store/run-record.ts";
 import type { RunWorkspace } from "../git/workspace.ts";
@@ -70,6 +71,20 @@ async function install(sources: DeveloperSources, command: string) {
   throw new StageError(`The install command \`${command}\` failed:\n${output}`);
 }
 
+// A plan that changes a dependency manifest needs the command that updates
+// the lockfile after the write (#49). Without it no session can leave the
+// branch consistent, so the stage escalates before the session (#58).
+function checkLockfileCommand(
+  manifests: readonly string[],
+  command: string | undefined,
+) {
+  if (manifests.length === 0 || command !== undefined) return;
+  throw new StageError(
+    `The plan changes ${manifests.join(", ")}, and the configuration has no commands.update_lockfile.`,
+    "missing-update-lockfile",
+  );
+}
+
 // What a Developer session gets besides the issue (SEC-8.10): the plan
 // version it implements, the failed gates of its last push, the open findings
 // of the latest review (FR-4.15) and the conflicts left by merging the main
@@ -81,6 +96,8 @@ export async function developerBrief(
 ): Promise<DeveloperBrief> {
   const { run } = record;
   const plan = await runPlan(sources, record.issue, run);
+  const { commands } = runConfig(run, sources.baseline);
+  checkLockfileCommand(planManifests(plan.body), commands.update_lockfile);
   const main = await sources.contents.defaultBranch();
   // The first stage of a run that continues an earlier run's branch.
   const merge =
@@ -94,7 +111,6 @@ export async function developerBrief(
     branch: run.branch,
     merge,
   });
-  const { commands } = runConfig(run, sources.baseline);
   await install(sources, commands.install);
   return {
     kind: "developer",
