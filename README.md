@@ -8,6 +8,7 @@ Specyfikacja pipeline'u, w którym wyspecjalizowani agenci AI przejmują GitHub 
 - [spec.md](spec.md): specyfikacja, czyli przebieg i maszyna stanów, agenci, bramki, bezpieczeństwo, hooki, konfiguracja repozytorium, ewaluacje, porównanie frameworków, metryki i rollout.
 - [plan.md](plan.md): plan techniczny MVP, czyli decyzje przy warunku zera kosztów, architektura, ochrona tokenu subskrypcji, przyrosty P0–P8, fazy po MVP i śledzenie wymagań.
 - [docs/e2e-mvp-report.md](docs/e2e-mvp-report.md): raport z testu end-to-end MVP (P8), czyli wyniki issue testowych, zużycie, blokady hooków, przegląd wycieku i poprawki.
+- [docs/onboarding.md](docs/onboarding.md): instrukcja podłączenia repozytorium do pipeline'u, czyli GitHub App, środowisko `agents`, `.sdlc-agents.yml`, kontrakt bramek, cienkie workflow, etykiety i rulesety.
 - [config/org-baseline.yml](config/org-baseline.yml): bazowy zestaw organizacji, czyli najłagodniejsze dopuszczalne wartości `.sdlc-agents.yml`, które repozytorium może tylko zaostrzyć (FR-10.2), oraz lista hostów sieciowych, której repozytorium nie zmienia.
 - [prompts](prompts): prompty ról i [roles.yml](prompts/roles.yml) z modelem i promptem każdej roli, wersjonowane razem (FR-5.8).
 
