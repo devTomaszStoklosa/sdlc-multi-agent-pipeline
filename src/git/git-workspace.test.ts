@@ -152,7 +152,7 @@ describe("GitWorkspace", { timeout: 60_000 }, () => {
     clone();
     const work = workspaceOf();
     await work.prepare({});
-    for (const file of [".env", ".gitmodules", "pnpm-lock.yaml"]) {
+    for (const file of [".env", ".gitmodules", ".npmrc", "pnpm-lock.yaml"]) {
       await writeFile(path.join(workspace, file), "");
     }
     // A placeholder name with content, or one the branch has, stays.
@@ -167,6 +167,7 @@ describe("GitWorkspace", { timeout: 60_000 }, () => {
       "src/new.ts",
     ]);
     expect(existsSync(path.join(workspace, ".env"))).toBe(false);
+    expect(existsSync(path.join(workspace, ".npmrc"))).toBe(false);
     expect(existsSync(path.join(workspace, "yarn.lock"))).toBe(true);
   });
 
