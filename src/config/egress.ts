@@ -45,8 +45,13 @@ const apt: readonly Endpoint[] = [
   https("packages.microsoft.com"),
 ];
 
-// The OpenSSF Scorecard of the dependencies in dependency-review.
-const scorecard: readonly Endpoint[] = [https("api.securityscorecards.dev")];
+// The OpenSSF Scorecard of the dependencies in dependency-review, and deps.dev,
+// which the action asks about the packages of a pull request that changes
+// dependencies (devTomaszStoklosa/Parapka#17).
+const scorecard: readonly Endpoint[] = [
+  https("api.deps.dev"),
+  https("api.securityscorecards.dev"),
+];
 
 const FIXED_GROUPS = { npm, anthropic, apt, scorecard } as const;
 
