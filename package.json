@@ -22,6 +22,7 @@
     "gate-config": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/gates/config/cli.ts",
     "coverage-gate": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/gates/line-coverage/cli.ts",
     "sast-gate": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/gates/sast/cli.ts",
+    "sast-languages": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/gates/sast/languages-cli.ts",
     "egress": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/config/egress-cli.ts",
     "prepare": "lefthook install"
   },
