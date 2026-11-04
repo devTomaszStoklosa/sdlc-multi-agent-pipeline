@@ -460,7 +460,7 @@ Metryki ze spec 14 należą do F5. MVP od początku zbiera zdarzenia z NFR-11.3,
 
 ## 10. Kroki ręczne autora
 
-Tokeny i klucze ustawia autor. Agent implementujący plan ich nie wpisuje.
+Tokeny i klucze ustawia autor. Agent implementujący plan ich nie wpisuje. Pełne kroki podłączenia kolejnego repozytorium są w [docs/onboarding.md](docs/onboarding.md) (#69).
 
 1. Uruchomić `claude setup-token` i dodać wynik jako sekret `CLAUDE_CODE_OAUTH_TOKEN` w środowisku `agents` repozytorium demo, a nie jako sekret całego repozytorium.
 2. Utworzyć GitHub App z uprawnieniami: contents, pull requests, issues i checks do zapisu, metadata do odczytu, bez `workflows`. Webhook aplikacji jest wyłączony, bo zdarzenia dostarcza GitHub Actions. Wygenerować klucz prywatny.
