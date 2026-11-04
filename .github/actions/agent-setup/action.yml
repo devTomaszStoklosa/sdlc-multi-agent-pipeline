@@ -8,12 +8,17 @@ runs:
   steps:
     # The Claude Code sandbox needs bubblewrap and socat, the hooks run
     # project commands in bubblewrap, and Ubuntu 24.04 blocks the
-    # unprivileged user namespaces that bubblewrap uses.
+    # unprivileged user namespaces that bubblewrap uses. Apt takes its
+    # mirrors from apt-mirrors.txt, which on some runners lists regional
+    # mirrors first; only the Azure mirror is in the egress allowlist (#80).
     - name: Install Claude Code and the sandbox
       shell: bash
       env:
         CLAUDE_CODE_VERSION: 2.1.312
       run: |
+        if [ -f /etc/apt/apt-mirrors.txt ]; then
+          echo "http://azure.archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+        fi
         sudo apt-get update
         sudo apt-get install --yes bubblewrap socat
         sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
