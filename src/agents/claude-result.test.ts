@@ -84,6 +84,19 @@ describe("toRoleResult", () => {
     });
   });
 
+  it.each([
+    "You've hit your 5-hour limit · resets 12:40pm (UTC)",
+    "You've hit your weekly limit",
+    "You've hit your limit",
+  ])("reports %j as the plan's usage limit", (text) => {
+    expect(
+      toRoleResult(
+        cli({ subtype: "success", is_error: true, result: text }),
+        wrap,
+      ),
+    ).toMatchObject({ status: "failed", failure: "usage-limit" });
+  });
+
   it("reports other errors as infrastructure errors without secrets", () => {
     const token = `sk-ant-oat01-${"x".repeat(40)}`;
     const result = toRoleResult(
