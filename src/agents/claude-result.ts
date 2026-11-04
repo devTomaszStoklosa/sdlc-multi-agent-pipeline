@@ -35,8 +35,10 @@ const cliResultSchema = z.looseObject({
 type CliResult = z.infer<typeof cliResultSchema>;
 
 // The Pro plan's limit (plan 2.2). Claude Code reports it as an error result,
-// sometimes with the reset time as Unix seconds after a `|`.
-const USAGE_LIMIT = /usage limit|hit your limit|limit reached|rate limit/i;
+// sometimes with the reset time as Unix seconds after a `|`, and sometimes
+// names the window, as in "You've hit your 5-hour limit" (#82).
+const USAGE_LIMIT =
+  /usage limit|hit your (?:[\w-]+ )?limit|limit reached|rate limit/i;
 const RESET_SECONDS = /\|(\d{10})\b/;
 
 function whole(value: number | undefined): number {
